@@ -121,10 +121,11 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
 export function MessageTimeline({ messages, toolCalls }: MessageTimelineProps) {
   const renderedCallIds = new Set<string>();
+  const visibleMessages = messages.filter((message) => message.role !== "tool");
 
   return (
     <>
-      {messages.map((message) => {
+      {visibleMessages.map((message) => {
         const relatedCalls = toolCalls.filter((call) => {
           const isRelated = call.assistant_message_id === message.id
             || (!call.assistant_message_id && call.tool_message_id === message.id);

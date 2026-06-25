@@ -6,6 +6,8 @@ import { LogoMark, SessionSidebar } from "./components/SessionSidebar";
 import { api } from "./lib/api";
 import type { ChatMessage, ChatSession, ToolCall } from "./types/api";
 
+const MAX_USER_MESSAGE_LENGTH = 10_000;
+
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
@@ -111,9 +113,22 @@ export default function App() {
         result.assistant_message,
       ]);
       setToolCalls((current) => [...current, ...result.tool_calls]);
+      setSessions((current) => current
+        .map((session) => session.id === sessionId
+          ? {
+              ...session,
+              title: session.title === "New conversation" ? content.slice(0, 40) : session.title,
+              updated_at: result.assistant_message.created_at,
+            }
+          : session)
+        .sort((left, right) => right.updated_at.localeCompare(left.updated_at)));
 
-      const refreshedSessions = await api.listSessions();
-      setSessions(refreshedSessions);
+      try {
+        const refreshedSessions = await api.listSessions();
+        setSessions(refreshedSessions);
+      } catch {
+        setError("消息已发送，但会话列表刷新失败；重新加载页面后可恢复同步。");
+      }
     } catch (caught) {
       setError(getErrorMessage(caught, "消息发送失败，请稍后重试。"));
     } finally {
@@ -214,8 +229,10 @@ export default function App() {
               setInput(value);
               if (error === "请输入消息内容后再发送。") setError(null);
             }}
+            maxLength={MAX_USER_MESSAGE_LENGTH}
             onEmptySubmit={() => setError("请输入消息内容后再发送。")}
             onSubmit={(content) => void sendMessage(content)}
+            onTooLongSubmit={() => setError(`消息长度不能超过 ${MAX_USER_MESSAGE_LENGTH} 个字符。`)}
             value={input}
           />
         </section>

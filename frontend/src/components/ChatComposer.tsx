@@ -4,23 +4,31 @@ interface ChatComposerProps {
   value: string;
   disabled: boolean;
   isSending: boolean;
+  maxLength: number;
   onChange: (value: string) => void;
   onEmptySubmit: () => void;
   onSubmit: (content: string) => void;
+  onTooLongSubmit: () => void;
 }
 
 export function ChatComposer({
   value,
   disabled,
   isSending,
+  maxLength,
   onChange,
   onEmptySubmit,
   onSubmit,
+  onTooLongSubmit,
 }: ChatComposerProps) {
   function submit() {
     const content = value.trim();
     if (!content) {
       onEmptySubmit();
+      return;
+    }
+    if (content.length > maxLength) {
+      onTooLongSubmit();
       return;
     }
     onSubmit(content);
@@ -67,9 +75,12 @@ export function ChatComposer({
           )}
         </button>
       </form>
-      <p className="mt-2 text-center text-[11px] text-slate-400">
-        AI 生成内容可能存在误差，请核对重要信息
-      </p>
+      <div className="mx-auto mt-2 flex max-w-4xl items-center justify-between gap-4 text-[11px] text-slate-400">
+        <p>AI 生成内容可能存在误差，请核对重要信息</p>
+        <p className={value.length > maxLength ? "font-semibold text-red-500" : ""}>
+          {value.length}/{maxLength}
+        </p>
+      </div>
     </footer>
   );
 }
