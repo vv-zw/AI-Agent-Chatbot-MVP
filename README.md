@@ -21,7 +21,7 @@ cd backend
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-copy ..\.env.example .env
+copy .env.example .env
 uvicorn app.main:app --reload
 ```
 
@@ -44,12 +44,12 @@ npm run dev
 - `OPENAI_API_KEY`：仅在 OpenAI-compatible 模式下需要。
 - `OPENAI_BASE_URL`：兼容服务地址。
 - `OPENAI_MODEL`：模型名称。
-- `CONTEXT_MESSAGE_LIMIT`：每轮发送给 LLM 的最近消息数量。
+- `MAX_CONTEXT_MESSAGES`：每轮发送给 LLM 的最近消息数量。
 - `VITE_API_BASE_URL`：前端访问后端的 API 根地址。
 
 ## Mock 模式与工具调用
 
-Mock provider 后续会根据关键词稳定地产生普通回复或工具调用，便于离线演示。工具由后端 Agent 层选择和执行，前端只展示过程，不直接触发工具。
+Mock provider 会根据关键词稳定地产生普通回复或工具调用，便于离线演示。工具由后端 Agent 层选择和执行，前端只展示过程，不直接触发工具。
 
 预留工具：
 
@@ -77,8 +77,43 @@ Mock provider 后续会根据关键词稳定地产生普通回复或工具调用
 - 消息读取和 Mock 聊天闭环。
 - sessions、messages、tool_calls、todos 数据模型。
 - 统一成功数据模型与结构化错误格式。
-- 前端基础会话栏、消息区、输入状态与错误展示。
+- 前端会话栏、消息区、输入状态、错误提示与结构化工具调用卡片。
+- Mock 模式下的普通对话、多轮项目名上下文、时间、计算和待办工具。
+- 会话、消息、工具调用和 Todo 的 SQLite 持久化与 session 隔离。
 
+## 联调验证
+
+后端默认使用 `LLM_PROVIDER=mock`，`OPENAI_API_KEY` 可留空。启动前请分别复制环境变量示例：
+
+```bash
+copy backend\.env.example backend\.env
+copy frontend\.env.example frontend\.env
+```
+
+可执行验证命令：
+
+```bash
+cd backend
+pytest
+
+cd ..\frontend
+npm run typecheck
+npm run lint
+npm run build
+```
+
+录屏演示建议依次输入：
+
+1. `你好，简单介绍一下你自己。`
+2. `我这个项目叫 ToolMind Chatbot。`
+3. `我刚刚说项目叫什么？`
+4. `现在几点？`
+5. `帮我算一下 128 * 36 + 520`
+6. `帮我记一个待办：明天提交笔试项目`
+7. `我有哪些待办？`
+8. `帮我算一下 1 / 0`
+
+所有业务接口均使用 `/api/v1/...`；成功响应从 `data` 读取，错误响应从 `error.message` 读取。
 ## 已知限制与后续优化
 
 - 当前 Mock LLM 使用确定性规则完成基础回复和单次工具路由；真实 OpenAI provider 仍是明确的扩展位。
