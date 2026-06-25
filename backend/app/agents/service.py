@@ -15,6 +15,7 @@ from app.tools.registry import (
     ToolArgumentError,
     ToolContext,
     ToolExecutionError,
+    ToolNotFoundError,
     ToolRegistry,
     tool_registry,
 )
@@ -190,6 +191,14 @@ class AgentService:
                 arguments,
                 ToolContext(db=db, session_id=session_id),
             )
+        except ToolNotFoundError as exc:
+            self._fail_tool_call(db, tool_call, "TOOL_NOT_FOUND", str(exc))
+            raise AppError(
+                code="TOOL_NOT_FOUND",
+                message="请求的工具不存在或未启用。",
+                status_code=422,
+                details={"tool_name": exc.name},
+            ) from exc
         except ToolArgumentError as exc:
             self._fail_tool_call(db, tool_call, "TOOL_ARGUMENT_INVALID", str(exc))
             raise AppError(

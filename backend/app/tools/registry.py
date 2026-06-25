@@ -14,6 +14,12 @@ from sqlmodel import Session, select
 from app.models import Todo
 
 
+class ToolNotFoundError(Exception):
+    def __init__(self, name: str) -> None:
+        self.name = name
+        super().__init__(f"Tool is not registered: {name}")
+
+
 class ToolArgumentError(Exception):
     def __init__(self, details: Any) -> None:
         self.details = details
@@ -89,7 +95,7 @@ class ToolRegistry:
     ) -> dict[str, Any]:
         definition = self._tools.get(name)
         if definition is None:
-            raise ToolArgumentError({"tool_name": name, "reason": "工具未注册。"})
+            raise ToolNotFoundError(name)
         try:
             validated = definition.input_model.model_validate(arguments)
         except ValidationError as exc:
