@@ -5,6 +5,7 @@ interface SessionSidebarProps {
   activeSessionId: string | null;
   isLoading: boolean;
   isCreating: boolean;
+  interactionDisabled: boolean;
   onCreateSession: () => void;
   onSelectSession: (sessionId: string) => void;
 }
@@ -32,6 +33,7 @@ export function SessionSidebar({
   activeSessionId,
   isLoading,
   isCreating,
+  interactionDisabled,
   onCreateSession,
   onSelectSession,
 }: SessionSidebarProps) {
@@ -47,7 +49,7 @@ export function SessionSidebar({
 
       <button
         className="mt-7 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-violet-50 disabled:opacity-60"
-        disabled={isCreating}
+        disabled={isCreating || interactionDisabled}
         onClick={onCreateSession}
         type="button"
       >
@@ -87,6 +89,7 @@ export function SessionSidebar({
                     ? "bg-violet-500 text-white shadow-lg shadow-violet-950/30"
                     : "text-slate-300 hover:bg-slate-900 hover:text-white"
                 }`}
+                disabled={interactionDisabled}
                 key={session.id}
                 onClick={() => onSelectSession(session.id)}
                 type="button"
