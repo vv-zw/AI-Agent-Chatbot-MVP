@@ -59,19 +59,31 @@ class MockLLMProvider:
         tool_name: str,
         result: dict[str, Any],
     ) -> str:
+        if result.get("status") == "failed":
+            return (
+                f"工具 {tool_name} 调用失败："
+                f"{result.get('error_message') or '请检查参数后重试。'}"
+            )
+
+        tool_result = result.get("result")
+        if not isinstance(tool_result, dict):
+            return f"工具 {tool_name} 已执行完成。"
+
         if tool_name == "get_current_time":
             return (
-                f"当前日期是 {result['date']}，时间是 {result['time']}，"
-                f"{result['weekday']}（{result['timezone']}）。"
+                f"当前日期是 {tool_result['date']}，时间是 {tool_result['time']}，"
+                f"{tool_result['weekday']}（{tool_result['timezone']}）。"
             )
         if tool_name == "calculator":
-            return f"计算结果：{result['expression']} = {result['value']}"
-        if tool_name == "todo_tool" and result.get("action") == "create":
-            return f"已记下待办：{result['todo']['title']}"
-        if tool_name == "todo_tool" and result.get("action") == "list":
-            todos = result.get("todos", [])
+            return (
+                f"计算结果：{tool_result['expression']} = {tool_result['value']}"
+            )
+        if tool_name == "todo_tool" and tool_result.get("action") == "create":
+            return f"已记下待办：{tool_result['todo']['title']}"
+        if tool_name == "todo_tool" and tool_result.get("action") == "list":
+            todos = tool_result.get("todos", [])
             if not todos:
                 return "当前会话还没有待办事项。"
             lines = [f"{index}. {todo['title']}" for index, todo in enumerate(todos, 1)]
             return "当前会话的待办：\n" + "\n".join(lines)
-        return f"工具 {tool_name} 已执行完成：{result}"
+        return f"工具 {tool_name} 已执行完成：{tool_result}"

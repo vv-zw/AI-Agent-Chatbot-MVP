@@ -57,7 +57,7 @@ Mock provider 后续会根据关键词稳定地产生普通回复或工具调用
 - `calculator`
 - `todo_tool`
 
-详细流程见 [docs/architecture.md](docs/architecture.md)。
+详细流程见 [docs/architecture.md](docs/architecture.md) 和 [docs/tool-calling-design.md](docs/tool-calling-design.md)。
 
 ## 技术选型
 
@@ -81,8 +81,8 @@ Mock provider 后续会根据关键词稳定地产生普通回复或工具调用
 
 ## 已知限制与后续优化
 
-- 当前 Mock chat 仅返回基础回声，工具路由与 OpenAI provider 仍是明确的扩展位。
+- 当前 Mock LLM 使用确定性规则完成基础回复和单次工具路由；真实 OpenAI provider 仍是明确的扩展位。
 - 尚未加入流式输出、鉴权、分页游标、并发写保护和生产级迁移工具。
-- Todo 的完整 CRUD、工具参数 schema、调用状态机和重试策略将在下一阶段实现。
+- 当前已实现工具参数 schema、白名单执行、调用状态持久化和 session 级 Todo 隔离；完整 Todo CRUD 与工具重试策略仍待后续实现。
 - SQLite 建表使用 `create_all`；生产环境应改为 Alembic 迁移。
 

@@ -101,19 +101,26 @@ def test_session_not_found_error(client: TestClient) -> None:
     assert response.json()["error"]["details"] == {"session_id": missing_id}
 
 
-def test_invalid_calculation_is_rejected_and_recorded(
+def test_invalid_calculation_is_returned_and_recorded(
     client: TestClient,
     session_id: str,
 ) -> None:
     response = send_message(client, session_id, "计算 2 + abc")
 
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "TOOL_ARGUMENT_INVALID"
+    assert response.status_code == 201
+    data = response.json()["data"]
+    tool_call = data["tool_calls"][0]
+    assert tool_call["tool_name"] == "calculator"
+    assert tool_call["status"] == "failed"
+    assert tool_call["error_code"] == "TOOL_ARGUMENT_INVALID"
+    assert tool_call["error_message"] == "表达式格式不正确。"
+    assert "调用失败" in data["assistant_message"]["content"]
 
     detail = client.get(f"/api/v1/sessions/{session_id}").json()["data"]
-    assert detail["tool_calls"][0]["tool_name"] == "calculator"
     assert detail["tool_calls"][0]["status"] == "failed"
-    assert detail["tool_calls"][0]["error_code"] == "TOOL_ARGUMENT_INVALID"
+    tool_messages = [item for item in detail["messages"] if item["role"] == "tool"]
+    assert len(tool_messages) == 1
+    assert '"status":"failed"' in tool_messages[0]["content"]
 
 
 def test_message_too_long_error(client: TestClient, session_id: str) -> None:
