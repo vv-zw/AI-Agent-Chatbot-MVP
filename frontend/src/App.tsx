@@ -1,222 +1,110 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
-
-import { api } from "./lib/api";
-import type { ChatMessage, ChatSession, ToolCall } from "./types/api";
-
-function messageStyle(role: ChatMessage["role"]) {
-  if (role === "user") {
-    return "ml-auto bg-brand text-white";
-  }
-  if (role === "tool") {
-    return "mr-auto border border-amber-200 bg-amber-50 text-amber-950";
-  }
-  return "mr-auto border border-slate-200 bg-white text-ink";
+function LogoMark() {
+  return (
+    <div className="grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 text-sm font-bold text-white shadow-lg shadow-violet-950/20">
+      AI
+    </div>
+  );
 }
 
 export default function App() {
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
-  const [input, setInput] = useState("");
-  const [isSending, setIsSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadSession = useCallback(async (sessionId: string) => {
-    setError(null);
-    const detail = await api.getSession(sessionId);
-    setActiveSessionId(sessionId);
-    setMessages(detail.messages);
-    setToolCalls(detail.tool_calls);
-  }, []);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const items = await api.listSessions();
-        setSessions(items);
-        if (items[0]) {
-          await loadSession(items[0].id);
-        }
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Failed to load.");
-      }
-    })();
-  }, [loadSession]);
-
-  async function createSession() {
-    if (isSending) return;
-    try {
-      setError(null);
-      const created = await api.createSession();
-      setSessions((current) => [created, ...current]);
-      setActiveSessionId(created.id);
-      setMessages([]);
-      setToolCalls([]);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to create.");
-    }
-  }
-
-  async function sendMessage(event: FormEvent) {
-    event.preventDefault();
-    const content = input.trim();
-    if (!content || !activeSessionId || isSending) return;
-
-    try {
-      setIsSending(true);
-      setError(null);
-      const result = await api.sendMessage(activeSessionId, { content });
-      setInput("");
-      setMessages((current) => [
-        ...current,
-        result.user_message,
-        result.assistant_message,
-      ]);
-      setToolCalls((current) => [...current, ...result.tool_calls]);
-      const refreshed = await api.listSessions();
-      setSessions(refreshed);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to send.");
-    } finally {
-      setIsSending(false);
-    }
-  }
-
   return (
-    <main className="min-h-screen bg-canvas text-ink">
-      <div className="mx-auto grid min-h-screen max-w-7xl md:grid-cols-[280px_1fr]">
-        <aside className="border-r border-slate-200 bg-slate-950 p-5 text-white">
-          <div className="mb-6 flex items-center justify-between">
+    <main className="min-h-screen bg-canvas p-0 text-ink md:p-4">
+      <div className="mx-auto grid min-h-screen max-w-[1440px] overflow-hidden bg-white shadow-2xl shadow-slate-300/40 md:min-h-[calc(100vh-2rem)] md:grid-cols-[300px_minmax(0,1fr)] md:rounded-[28px]">
+        <aside className="hidden flex-col bg-slate-950 p-5 text-white md:flex">
+          <div className="flex items-center gap-3 px-1">
+            <LogoMark />
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300">
-                Local-first
-              </p>
-              <h1 className="mt-1 text-lg font-semibold">Agent Chatbot</h1>
+              <p className="text-sm font-semibold">AI Chatbot</p>
+              <p className="mt-0.5 text-xs text-slate-400">你的智能工作助手</p>
             </div>
-            <span className="rounded-full bg-emerald-400/15 px-2 py-1 text-xs text-emerald-300">
-              Mock
-            </span>
           </div>
 
           <button
-            className="mb-5 w-full rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-violet-100 disabled:opacity-50"
-            onClick={() => void createSession()}
-            disabled={isSending}
+            className="mt-7 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-violet-50"
+            type="button"
           >
-            + New conversation
+            <span className="text-lg leading-none">＋</span>
+            新建会话
           </button>
 
-          <nav className="space-y-2">
-            {sessions.map((session) => (
-              <button
-                key={session.id}
-                className={`w-full rounded-xl px-3 py-3 text-left text-sm transition ${
-                  activeSessionId === session.id
-                    ? "bg-violet-500 text-white"
-                    : "text-slate-300 hover:bg-slate-800"
-                }`}
-                onClick={() => void loadSession(session.id)}
-              >
-                <span className="block truncate">{session.title}</span>
-              </button>
-            ))}
-            {sessions.length === 0 && (
-              <p className="px-2 text-sm text-slate-500">No conversations yet.</p>
-            )}
-          </nav>
-        </aside>
-
-        <section className="flex min-h-screen flex-col">
-          <header className="border-b border-slate-200 bg-white px-6 py-4">
-            <h2 className="font-semibold">
-              {activeSessionId ? "Conversation" : "Start a conversation"}
-            </h2>
-            <p className="text-sm text-slate-500">
-              Messages and tool traces are persisted by FastAPI + SQLite.
+          <div className="mt-7">
+            <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              最近会话
             </p>
-          </header>
-
-          <div className="flex-1 space-y-4 overflow-y-auto p-6">
-            {messages.length === 0 && (
-              <div className="mx-auto mt-20 max-w-md text-center">
-                <div className="mx-auto mb-4 grid size-14 place-items-center rounded-2xl bg-violet-100 text-2xl">
-                  ✦
-                </div>
-                <h3 className="text-xl font-semibold">A clean starting point</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Create a conversation, then send a message. Tool execution
-                  cards will appear here in the next implementation stage.
-                </p>
-              </div>
-            )}
-
-            {messages.map((message) => (
-              <article
-                key={message.id}
-                className={`max-w-2xl rounded-2xl px-4 py-3 shadow-sm ${messageStyle(
-                  message.role,
-                )}`}
-              >
-                <p className="mb-1 text-xs font-semibold uppercase opacity-60">
-                  {message.role}
-                </p>
-                <p className="whitespace-pre-wrap text-sm leading-6">
-                  {message.content}
-                </p>
-              </article>
-            ))}
-
-            {toolCalls.map((call) => (
-              <article
-                key={call.id}
-                className="max-w-2xl rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm"
-              >
-                <p className="font-semibold">Tool · {call.tool_name}</p>
-                <p className="mt-1 text-amber-800">Status: {call.status}</p>
-              </article>
-            ))}
-
-            {isSending && (
-              <div className="mr-auto rounded-2xl border bg-white px-4 py-3 text-sm text-slate-500">
-                Assistant is thinking…
-              </div>
-            )}
+            <div className="mt-3 rounded-2xl border border-dashed border-slate-800 px-4 py-8 text-center">
+              <p className="text-sm text-slate-400">暂无历史会话</p>
+              <p className="mt-1 text-xs leading-5 text-slate-600">
+                新建会话后会显示在这里
+              </p>
+            </div>
           </div>
 
-          <footer className="border-t border-slate-200 bg-white p-5">
-            {error && (
-              <p className="mx-auto mb-3 max-w-3xl rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
+          <div className="mt-auto rounded-2xl bg-slate-900 p-4">
+            <div className="flex items-center gap-2 text-xs text-slate-300">
+              <span className="size-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
+              后端服务状态
+            </div>
+            <p className="mt-2 text-xs leading-5 text-slate-500">
+              会话与消息由服务端持久化保存
+            </p>
+          </div>
+        </aside>
+
+        <section className="flex min-h-screen min-w-0 flex-col bg-white md:min-h-0">
+          <header className="flex min-h-20 items-center gap-3 border-b border-slate-100 px-4 sm:px-7">
+            <div className="md:hidden">
+              <LogoMark />
+            </div>
+            <div className="min-w-0">
+              <h1 className="truncate font-semibold text-slate-900">开始新对话</h1>
+              <p className="mt-0.5 text-xs text-slate-500">
+                新建一个会话，开始与 AI 助手交流
               </p>
-            )}
-            <form
-              className="mx-auto flex max-w-3xl gap-3"
-              onSubmit={(event) => void sendMessage(event)}
-            >
-              <input
-                className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-brand focus:ring-2 focus:ring-violet-100 disabled:bg-slate-100"
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder={
-                  activeSessionId
-                    ? "Ask something…"
-                    : "Create a conversation first"
-                }
-                disabled={!activeSessionId || isSending}
+            </div>
+          </header>
+
+          <div className="flex flex-1 items-center justify-center px-6 py-12">
+            <div className="max-w-md text-center">
+              <div className="mx-auto grid size-20 place-items-center rounded-[28px] bg-violet-50 text-3xl shadow-inner shadow-violet-100">
+                ✦
+              </div>
+              <h2 className="mt-6 text-2xl font-semibold tracking-tight text-slate-900">
+                有什么可以帮你？
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-slate-500">
+                新建会话后，你可以连续提问，并在这里查看助手回复和工具调用过程。
+              </p>
+              <button
+                className="mt-7 rounded-2xl bg-brand px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-200 transition hover:bg-violet-700"
+                type="button"
+              >
+                新建会话
+              </button>
+            </div>
+          </div>
+
+          <footer className="border-t border-slate-100 bg-white px-4 py-4 sm:px-7">
+            <div className="mx-auto flex max-w-4xl items-end gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-2 shadow-sm">
+              <textarea
+                className="min-h-12 flex-1 resize-none bg-transparent px-3 py-3 text-sm outline-none placeholder:text-slate-400"
+                disabled
+                placeholder="请先新建会话"
+                rows={1}
               />
               <button
-                className="rounded-xl bg-brand px-5 py-3 font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={!activeSessionId || !input.trim() || isSending}
-                type="submit"
+                className="grid size-11 shrink-0 place-items-center rounded-xl bg-slate-200 text-slate-400"
+                disabled
+                type="button"
               >
-                Send
+                ↑
               </button>
-            </form>
+            </div>
+            <p className="mt-2 text-center text-[11px] text-slate-400">
+              AI 生成内容可能存在误差，请核对重要信息
+            </p>
           </footer>
         </section>
       </div>
     </main>
   );
 }
-

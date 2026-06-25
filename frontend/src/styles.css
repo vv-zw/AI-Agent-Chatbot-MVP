@@ -20,10 +20,21 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgb(237 233 254 / 0.8), transparent 30rem),
+    #f5f7fb;
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
