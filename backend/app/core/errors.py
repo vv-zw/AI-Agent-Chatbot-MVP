@@ -57,7 +57,14 @@ async def validation_error_handler(
             error_payload(
                 "VALIDATION_ERROR",
                 "请求参数校验失败。",
-                exc.errors(),
+                [
+                    {
+                        "type": error.get("type"),
+                        "loc": error.get("loc"),
+                        "msg": error.get("msg"),
+                    }
+                    for error in exc.errors()
+                ],
             )
         ),
     )

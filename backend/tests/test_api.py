@@ -153,3 +153,70 @@ def test_framework_http_errors_use_unified_format(client: TestClient) -> None:
             "details": {"status_code": 404},
         }
     }
+
+def test_validation_error_does_not_echo_raw_input(client: TestClient) -> None:
+    secret_input = "sk-test-sensitive-value"
+    response = client.post(
+        "/api/v1/sessions",
+        json={"title": {"unexpected": secret_input}},
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error"]["code"] == "VALIDATION_ERROR"
+    assert secret_input not in response.text
+    assert set(payload["error"]["details"][0]) == {"type", "loc", "msg"}
+
+
+def test_unhandled_error_response_hides_internal_details(
+    client: TestClient,
+    session_id: str,
+    monkeypatch,
+) -> None:
+    from app.api.v1.routes import sessions
+
+    leaked_detail = "C:\\private\\project\\.env sk-secret-key"
+
+    def fail_run(*args, **kwargs):
+        raise RuntimeError(leaked_detail)
+
+    monkeypatch.setattr(sessions.AgentService, "run", fail_run)
+    response = send_message(client, session_id, "触发服务端异常")
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "error": {
+            "code": "INTERNAL_SERVER_ERROR",
+            "message": "服务暂时不可用，请稍后重试。",
+            "details": {},
+        }
+    }
+    assert leaked_detail not in response.text
+
+
+def test_localhost_and_loopback_frontends_are_allowed_by_cors(client: TestClient) -> None:
+    for origin in ("http://localhost:5173", "http://127.0.0.1:5173"):
+        response = client.options(
+            "/api/v1/health",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == origin
+
+
+def test_messages_and_tool_calls_are_isolated_by_session(client: TestClient) -> None:
+    first = client.post("/api/v1/sessions", json={}).json()["data"]["id"]
+    second = client.post("/api/v1/sessions", json={}).json()["data"]["id"]
+
+    sent = send_message(client, first, "现在几点？")
+    assert sent.status_code == 201
+
+    first_detail = client.get(f"/api/v1/sessions/{first}").json()["data"]
+    second_detail = client.get(f"/api/v1/sessions/{second}").json()["data"]
+    assert len(first_detail["messages"]) == 3
+    assert len(first_detail["tool_calls"]) == 1
+    assert second_detail["messages"] == []
+    assert second_detail["tool_calls"] == []
