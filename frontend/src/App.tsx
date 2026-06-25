@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ChatComposer } from "./components/ChatComposer";
+import { MessageTimeline } from "./components/MessageTimeline";
 import { LogoMark, SessionSidebar } from "./components/SessionSidebar";
 import { api } from "./lib/api";
 import type { ChatMessage, ChatSession, ToolCall } from "./types/api";
@@ -9,21 +10,11 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-function formatMessageTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
 export default function App() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [, setToolCalls] = useState<ToolCall[]>([]);
+  const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
   const [input, setInput] = useState("");
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
@@ -200,18 +191,7 @@ export default function App() {
 
             {!isLoadingSession && (messages.length > 0 || isSending) && (
               <div className="mx-auto max-w-4xl space-y-5">
-                {messages.map((message) => {
-                  const isUser = message.role === "user";
-                  return (
-                    <article className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`} key={message.id}>
-                      <div className={`grid size-9 shrink-0 place-items-center rounded-xl text-xs font-bold ${isUser ? "bg-slate-900 text-white" : "bg-violet-100 text-violet-700"}`}>{isUser ? "你" : "AI"}</div>
-                      <div className={`max-w-[min(80%,42rem)] rounded-3xl px-4 py-3 ${isUser ? "rounded-tr-md bg-brand text-white" : "rounded-tl-md border border-slate-100 bg-slate-50 text-slate-800"}`}>
-                        <p className="whitespace-pre-wrap text-sm leading-7">{message.content}</p>
-                        <time className={`mt-1.5 block text-[11px] ${isUser ? "text-violet-200" : "text-slate-400"}`} dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time>
-                      </div>
-                    </article>
-                  );
-                })}
+                <MessageTimeline messages={messages} toolCalls={toolCalls} />
 
                 {isSending && (
                   <div className="flex gap-3" aria-live="polite">
