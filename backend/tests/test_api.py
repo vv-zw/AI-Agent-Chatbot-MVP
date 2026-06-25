@@ -34,18 +34,18 @@ def test_create_list_and_get_session(client: TestClient) -> None:
 
 
 def test_send_normal_mock_message(client: TestClient, session_id: str) -> None:
-    response = send_message(client, session_id, "你好，介绍一下自己")
+    response = send_message(client, session_id, "你好，简单介绍一下你自己。")
 
     assert response.status_code == 201
     data = response.json()["data"]
-    assert data["user_message"]["content"] == "你好，介绍一下自己"
+    assert data["user_message"]["content"] == "你好，简单介绍一下你自己。"
     assert data["assistant_message"]["role"] == "assistant"
-    assert data["assistant_message"]["content"].startswith("[Mock]")
+    assert "Mock AI 助手" in data["assistant_message"]["content"]
     assert data["tool_calls"] == []
 
 
 def test_time_tool_call(client: TestClient, session_id: str) -> None:
-    response = send_message(client, session_id, "现在几点")
+    response = send_message(client, session_id, "现在几点？")
 
     assert response.status_code == 201
     tool_call = response.json()["data"]["tool_calls"][0]
@@ -55,24 +55,24 @@ def test_time_tool_call(client: TestClient, session_id: str) -> None:
 
 
 def test_calculator_tool_call(client: TestClient, session_id: str) -> None:
-    response = send_message(client, session_id, "帮我算 (12.5 + 7.5) / 4")
+    response = send_message(client, session_id, "帮我算一下 128 * 36 + 520")
 
     assert response.status_code == 201
     data = response.json()["data"]
     assert data["tool_calls"][0]["tool_name"] == "calculator"
-    assert data["tool_calls"][0]["result"]["value"] == "5"
-    assert "= 5" in data["assistant_message"]["content"]
+    assert data["tool_calls"][0]["result"]["value"] == "5128"
+    assert "= 5128" in data["assistant_message"]["content"]
 
 
 def test_todo_create_and_list(client: TestClient, session_id: str) -> None:
-    created = send_message(client, session_id, "帮我记一个待办：补充接口文档")
+    created = send_message(client, session_id, "帮我记一个待办：明天提交笔试项目")
     assert created.status_code == 201
-    assert created.json()["data"]["tool_calls"][0]["result"]["todo"]["title"] == "补充接口文档"
+    assert created.json()["data"]["tool_calls"][0]["result"]["todo"]["title"] == "明天提交笔试项目"
 
-    listed = send_message(client, session_id, "我有哪些待办")
+    listed = send_message(client, session_id, "我有哪些待办？")
     assert listed.status_code == 201
     todos = listed.json()["data"]["tool_calls"][0]["result"]["todos"]
-    assert [todo["title"] for todo in todos] == ["补充接口文档"]
+    assert [todo["title"] for todo in todos] == ["明天提交笔试项目"]
 
     detail = client.get(f"/api/v1/sessions/{session_id}").json()["data"]
     assert any(message["role"] == "tool" for message in detail["messages"])
@@ -87,7 +87,7 @@ def test_empty_message_error(client: TestClient, session_id: str) -> None:
         "error": {
             "code": "EMPTY_MESSAGE",
             "message": "消息内容不能为空。",
-            "details": None,
+            "details": {},
         }
     }
 
@@ -128,3 +128,28 @@ def test_message_too_long_error(client: TestClient, session_id: str) -> None:
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "MESSAGE_TOO_LONG"
+
+
+def test_mock_remembers_project_name_in_current_session(
+    client: TestClient,
+    session_id: str,
+) -> None:
+    first = send_message(client, session_id, "我这个项目叫 ToolMind Chatbot。")
+    second = send_message(client, session_id, "我刚刚说项目叫什么？")
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert "ToolMind Chatbot" in second.json()["data"]["assistant_message"]["content"]
+
+
+def test_framework_http_errors_use_unified_format(client: TestClient) -> None:
+    response = client.get("/api/health")
+
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "code": "ROUTE_NOT_FOUND",
+            "message": "请求的接口不存在。",
+            "details": {"status_code": 404},
+        }
+    }

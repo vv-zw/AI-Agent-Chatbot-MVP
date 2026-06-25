@@ -6,6 +6,9 @@ from app.llm.base import LLMResult, ToolCallRequest
 
 TODO_CREATE_PATTERN = re.compile(r"帮我记一个待办\s*[：:]\s*(.+)", re.DOTALL)
 CALCULATION_PATTERN = re.compile(r"(?<!\w)([-+*/().\d\s]*\d\s*[-+*/]\s*[-+*/().\d\s]+)")
+PROJECT_NAME_PATTERN = re.compile(
+    r"(?:我这个项目|项目)\s*(?:叫|名为)\s*([^\n。！？!?]+)"
+)
 
 
 class MockLLMProvider:
@@ -48,6 +51,25 @@ class MockLLMProvider:
                 tool_call=ToolCallRequest(
                     name="calculator",
                     arguments={"expression": expression},
+                )
+            )
+
+        if "项目叫什么" in latest or "项目名称" in latest:
+            for message in reversed(messages[:-1]):
+                if message.get("role") != "user":
+                    continue
+                project_match = PROJECT_NAME_PATTERN.search(message.get("content", ""))
+                if project_match:
+                    return LLMResult(
+                        content=f"你刚刚说这个项目叫 {project_match.group(1).strip()}。"
+                    )
+            return LLMResult(content="你还没有在当前会话中告诉我项目名称。")
+
+        if any(keyword in latest for keyword in ("介绍一下你自己", "介绍一下自己")):
+            return LLMResult(
+                content=(
+                    "我是当前项目的 Mock AI 助手，可以进行基础对话，"
+                    "也可以调用时间、计算器和待办工具。"
                 )
             )
 

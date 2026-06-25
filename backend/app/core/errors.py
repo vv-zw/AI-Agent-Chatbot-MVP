@@ -5,6 +5,7 @@ from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ def error_payload(
         "error": {
             "code": code,
             "message": message,
-            "details": details,
+            "details": details if details is not None else {},
         }
     }
 
@@ -59,6 +60,30 @@ async def validation_error_handler(
                 exc.errors(),
             )
         ),
+    )
+
+
+async def http_error_handler(
+    _: Request,
+    exc: StarletteHTTPException,
+) -> JSONResponse:
+    code = "HTTP_ERROR"
+    message = "请求处理失败。"
+    if exc.status_code == 404:
+        code = "ROUTE_NOT_FOUND"
+        message = "请求的接口不存在。"
+    elif exc.status_code == 405:
+        code = "METHOD_NOT_ALLOWED"
+        message = "当前接口不支持该请求方法。"
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_payload(
+            code,
+            message,
+            {"status_code": exc.status_code},
+        ),
+        headers=exc.headers,
     )
 
 
