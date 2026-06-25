@@ -1,9 +1,11 @@
 export type MessageRole = "user" | "assistant" | "tool";
 export type ToolCallStatus = "pending" | "succeeded" | "failed";
 
-export interface ApiResponse<T> {
+export interface ApiSuccessResponse<T> {
   data: T;
 }
+
+export type ApiResponse<T> = ApiSuccessResponse<T>;
 
 export interface ApiErrorDetail {
   code: string;
@@ -13,6 +15,11 @@ export interface ApiErrorDetail {
 
 export interface ApiErrorResponse {
   error: ApiErrorDetail;
+}
+
+export interface HealthStatus {
+  status: string;
+  provider: string;
 }
 
 export interface ChatSession {
@@ -64,3 +71,7 @@ export interface ChatResponse {
   tool_calls: ToolCall[];
 }
 
+export type Session = ChatSession;
+export type Message = ChatMessage;
+export type SendMessageRequest = ChatRequest;
+export type SendMessageResponse = ChatResponse;
