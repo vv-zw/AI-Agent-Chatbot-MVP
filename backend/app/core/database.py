@@ -20,14 +20,13 @@ connect_args = (
 engine = create_engine(settings.database_url, connect_args=connect_args)
 
 
-def create_db_and_tables() -> None:
+def create_db_and_tables(database_engine=engine) -> None:
     # Importing models registers SQLModel metadata before create_all.
     from app.models import Message, SessionRecord, Todo, ToolCall  # noqa: F401
 
-    SQLModel.metadata.create_all(engine)
+    SQLModel.metadata.create_all(database_engine)
 
 
 def get_db_session() -> Generator[Session, None, None]:
     with Session(engine) as session:
         yield session
-

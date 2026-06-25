@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, JSON, Text
+from sqlalchemy import Column, ForeignKey, JSON, Text, Uuid
 from sqlmodel import Field, SQLModel
 
 
@@ -23,6 +23,11 @@ class ToolCallStatus(StrEnum):
     FAILED = "failed"
 
 
+class TodoStatus(StrEnum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+
+
 class SessionRecord(SQLModel, table=True):
     __tablename__ = "sessions"
 
@@ -39,6 +44,10 @@ class Message(SQLModel, table=True):
     session_id: UUID = Field(foreign_key="sessions.id", index=True)
     role: MessageRole = Field(index=True)
     content: str = Field(sa_column=Column(Text, nullable=False))
+    metadata_json: dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column("metadata", JSON, nullable=False),
+    )
     created_at: datetime = Field(default_factory=utc_now, index=True)
 
 
@@ -49,8 +58,13 @@ class ToolCall(SQLModel, table=True):
     session_id: UUID = Field(foreign_key="sessions.id", index=True)
     assistant_message_id: UUID | None = Field(
         default=None,
-        foreign_key="messages.id",
-        index=True,
+        sa_column=Column(
+            "message_id",
+            Uuid,
+            ForeignKey("messages.id"),
+            nullable=True,
+            index=True,
+        ),
     )
     tool_message_id: UUID | None = Field(
         default=None,
@@ -72,8 +86,7 @@ class Todo(SQLModel, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     session_id: UUID = Field(foreign_key="sessions.id", index=True)
-    content: str = Field(max_length=500)
-    is_completed: bool = Field(default=False, index=True)
+    title: str = Field(max_length=500)
+    status: TodoStatus = Field(default=TodoStatus.PENDING, index=True)
     created_at: datetime = Field(default_factory=utc_now, index=True)
-    completed_at: datetime | None = None
-
+    updated_at: datetime = Field(default_factory=utc_now, index=True)
