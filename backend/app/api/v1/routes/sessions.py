@@ -1,13 +1,13 @@
-from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, status
 from sqlmodel import select
 
+from app.agents.service import AgentService
 from app.api.deps import DatabaseSession
+from app.core.config import get_settings
 from app.core.errors import AppError
 from app.models import Message, SessionRecord, ToolCall
-from app.models.entities import MessageRole
 from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
@@ -27,7 +27,7 @@ def get_session_or_404(db: DatabaseSession, session_id: UUID) -> SessionRecord:
     if session_record is None:
         raise AppError(
             code="SESSION_NOT_FOUND",
-            message="Session does not exist.",
+            message="会话不存在。",
             status_code=404,
             details={"session_id": str(session_id)},
         )
@@ -51,7 +51,14 @@ def create_session(
     payload: SessionCreate,
     db: DatabaseSession,
 ) -> ApiResponse[SessionRecord]:
-    record = SessionRecord(title=payload.title.strip())
+    title = payload.title.strip()
+    if not title:
+        raise AppError(
+            code="VALIDATION_ERROR",
+            message="会话标题不能为空。",
+            status_code=422,
+        )
+    record = SessionRecord(title=title)
     db.add(record)
     db.commit()
     db.refresh(record)
@@ -94,40 +101,21 @@ def send_message(
     db: DatabaseSession,
 ) -> ApiResponse[ChatResponse]:
     record = get_session_or_404(db, session_id)
+    settings = get_settings()
     content = payload.content.strip()
     if not content:
         raise AppError(
             code="EMPTY_MESSAGE",
-            message="Message content cannot be empty.",
+            message="消息内容不能为空。",
             status_code=422,
         )
-
-    user_message = Message(
-        session_id=session_id,
-        role=MessageRole.USER,
-        content=content,
-    )
-    assistant_message = Message(
-        session_id=session_id,
-        role=MessageRole.ASSISTANT,
-        content=f"[Mock] I received: {content}",
-    )
-    record.updated_at = datetime.now(timezone.utc)
-    if record.title == "New conversation":
-        record.title = content[:40]
-
-    db.add(user_message)
-    db.add(assistant_message)
-    db.add(record)
-    db.commit()
-    db.refresh(user_message)
-    db.refresh(assistant_message)
-
-    return ApiResponse(
-        data=ChatResponse(
-            user_message=MessageRead.model_validate(user_message),
-            assistant_message=MessageRead.model_validate(assistant_message),
-            tool_calls=[],
+    if len(content) > settings.max_user_message_length:
+        raise AppError(
+            code="MESSAGE_TOO_LONG",
+            message=f"消息长度不能超过 {settings.max_user_message_length} 个字符。",
+            status_code=422,
+            details={"max_length": settings.max_user_message_length},
         )
-    )
 
+    response = AgentService(settings).run(db, record, content)
+    return ApiResponse(data=response)

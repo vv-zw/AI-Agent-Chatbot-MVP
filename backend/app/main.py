@@ -1,5 +1,5 @@
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -11,6 +11,7 @@ from app.core.database import create_db_and_tables
 from app.core.errors import (
     AppError,
     app_error_handler,
+    unhandled_error_handler,
     validation_error_handler,
 )
 
@@ -37,5 +38,5 @@ app.add_middleware(
 )
 app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
+app.add_exception_handler(Exception, unhandled_error_handler)
 app.include_router(api_router, prefix="/api/v1")
-

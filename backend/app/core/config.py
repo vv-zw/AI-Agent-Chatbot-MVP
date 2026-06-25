@@ -11,7 +11,8 @@ class Settings(BaseSettings):
     app_port: int = 8000
     database_url: str = "sqlite:///./data/chatbot.db"
     cors_origins: list[str] = ["http://localhost:5173"]
-    context_message_limit: int = 20
+    max_context_messages: int = 20
+    max_user_message_length: int = 10_000
 
     llm_provider: str = "mock"
     openai_api_key: str | None = None
@@ -31,8 +32,12 @@ class Settings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
+    @field_validator("llm_provider")
+    @classmethod
+    def normalize_provider(cls, value: str) -> str:
+        return value.strip().lower()
+
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

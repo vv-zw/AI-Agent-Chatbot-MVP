@@ -8,7 +8,7 @@ from app.models.entities import MessageRole, ToolCallStatus
 
 
 class SessionCreate(BaseModel):
-    title: str = Field(default="New conversation", min_length=1, max_length=120)
+    title: str = Field(default="New conversation", max_length=120)
 
 
 class SessionRead(BaseModel):
@@ -48,16 +48,15 @@ class ToolCallRead(BaseModel):
 
 
 class SessionDetail(SessionRead):
-    messages: list[MessageRead] = []
-    tool_calls: list[ToolCallRead] = []
+    messages: list[MessageRead] = Field(default_factory=list)
+    tool_calls: list[ToolCallRead] = Field(default_factory=list)
 
 
 class ChatRequest(BaseModel):
-    content: str = Field(min_length=1, max_length=10_000)
+    content: str
 
 
 class ChatResponse(BaseModel):
     user_message: MessageRead
     assistant_message: MessageRead
-    tool_calls: list[ToolCallRead] = []
-
+    tool_calls: list[ToolCallRead] = Field(default_factory=list)
