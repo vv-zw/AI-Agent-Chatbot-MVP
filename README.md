@@ -76,6 +76,43 @@ npm run dev
 
 如果 Vite 提示端口被占用，以终端输出地址为准；如改前端端口，需要同步调整后端 `backend/.env` 中的 `CORS_ORIGINS`。
 
+## Docker 一键启动
+
+在项目根目录执行：
+
+```bash
+docker-compose up --build
+```
+
+默认使用 Mock 模式，无需真实 API Key，也不会读取或提交本地 `.env`。启动后访问：
+
+- 前端：http://localhost:5173
+- 后端 API 文档：http://localhost:8000/docs
+- 后端健康检查：http://localhost:8000/api/v1/health
+
+停止服务：
+
+```bash
+docker-compose down
+```
+
+后端 SQLite 数据默认持久化到 Docker volume `backend-data`。如需同时删除容器和该 volume：
+
+```bash
+docker-compose down -v
+```
+
+如需在容器中配置真实 DeepSeek / OpenAI-compatible API，可通过环境变量覆盖后端服务配置，例如：
+
+```bash
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your_deepseek_api_key
+OPENAI_BASE_URL=https://api.deepseek.com
+OPENAI_MODEL=deepseek-chat
+```
+
+不要把真实 API Key 写入仓库文件。真实 API 模式当前适合普通聊天验证；工具调用演示仍推荐使用默认 Mock 模式。
+
 ## 后端环境配置
 
 配置文件只放在 `backend/.env`，不要把真实 `.env` 提交到 GitHub。
