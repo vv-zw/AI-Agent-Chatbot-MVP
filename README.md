@@ -277,7 +277,7 @@ POST /api/v1/llm/provider
 
 ## 测试与验证
 
-后端：
+后端自动化测试：
 
 ```powershell
 cd backend
@@ -285,11 +285,39 @@ cd backend
 pytest
 ```
 
-前端：
+如果当前 PowerShell 未激活虚拟环境，也可以执行：
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m pytest
+```
+
+后端测试使用独立的内存 SQLite 测试库，并在每个测试前后清理数据，不会污染本地 `backend/chatbot.db`。测试默认强制使用 Mock Provider，不依赖 DeepSeek / OpenAI API Key。
+
+当前自动化测试覆盖：
+
+- `GET /api/v1/health`、会话创建、列表、详情、删除。
+- Mock 普通消息、多轮上下文、空输入、超长输入、session 不存在。
+- Provider 查询与切换、非法 provider、无 API Key 时 Mock 模式仍可用。
+- 时间工具、计算工具、待办创建与查询。
+- calculator 非法表达式、除零错误和结构化失败结果。
+- 工具调用记录落库到 `tool_calls`，工具结果保存为 `role=tool` 消息。
+- 消息发送响应包含前端展示工具调用所需的 `tool_calls` 信息。
+- todo、消息和工具调用不跨 session 泄露。
+- 旧 SQLite schema 迁移兼容性。
+
+前端构建检查：
 
 ```powershell
 cd frontend
 npm run build
+```
+
+前端类型检查：
+
+```powershell
+cd frontend
+npm run typecheck
 ```
 
 推荐手动验证：
