@@ -1,5 +1,10 @@
 ﻿import os
 from collections.abc import Generator
+from pathlib import Path
+
+
+def pytest_configure() -> None:
+    Path(".tmp").mkdir(exist_ok=True)
 
 os.environ["LLM_PROVIDER"] = "mock"
 os.environ["OPENAI_API_KEY"] = ""

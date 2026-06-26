@@ -289,12 +289,15 @@ pytest
 
 ```powershell
 cd backend
-.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m pytest --basetemp=.tmp/pytest
 ```
 
 后端测试使用独立的内存 SQLite 测试库，并在每个测试前后清理数据，不会污染本地 `backend/chatbot.db`。测试默认强制使用 Mock Provider，不依赖 DeepSeek / OpenAI API Key。
 
+Windows 环境下如系统临时目录权限受限，可显式执行 `python -m pytest --basetemp=.tmp/pytest`；仓库内 `backend/pytest.ini` 也已默认将 pytest 临时目录和缓存目录放到项目内 `.tmp/`。
+
 当前自动化测试覆盖：
+
 
 - `GET /api/v1/health`、会话创建、列表、详情、删除。
 - Mock 普通消息、多轮上下文、空输入、超长输入、session 不存在。
