@@ -31,51 +31,51 @@ function ToolCallCard({ call }: { call: ToolCall }) {
     pending: {
       label: "正在调用工具",
       badge: "处理中",
-      className: "border-amber-200 bg-amber-50 text-amber-800",
-      dotClassName: "bg-amber-400 animate-pulse",
+      className: "border-warning/25 bg-[#fff8eb] text-warning",
+      dotClassName: "bg-warning animate-pulse",
     },
     succeeded: {
       label: "工具调用完成",
       badge: "成功",
-      className: "border-emerald-200 bg-emerald-50 text-emerald-800",
-      dotClassName: "bg-emerald-500",
+      className: "border-success/20 bg-[#f3faf4] text-success",
+      dotClassName: "bg-success",
     },
     failed: {
       label: "工具调用失败",
       badge: "失败",
-      className: "border-red-200 bg-red-50 text-red-800",
-      dotClassName: "bg-red-500",
+      className: "border-danger/20 bg-[#fff5f4] text-danger",
+      dotClassName: "bg-danger",
     },
   }[call.status];
 
   return (
-    <article className={`ml-12 max-w-2xl overflow-hidden rounded-2xl border ${status.className}`}>
-      <div className="flex items-center justify-between gap-3 border-b border-current/10 px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2.5">
+    <article className="ml-12 max-w-2xl overflow-hidden rounded-xl border border-line bg-panel shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-line bg-[#f7f7f2] px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
           <span className={`size-2.5 shrink-0 rounded-full ${status.dotClassName}`} />
           <div className="min-w-0">
-            <p className="text-xs font-medium opacity-75">{status.label}</p>
-            <p className="truncate font-mono text-sm font-semibold">{call.tool_name}</p>
+            <p className="text-xs font-medium text-muted">{status.label}</p>
+            <p className="truncate font-mono text-sm font-semibold text-ink">{call.tool_name}</p>
           </div>
         </div>
-        <span className="rounded-full bg-white/70 px-2.5 py-1 text-xs font-semibold">{status.badge}</span>
+        <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${status.className}`}>{status.badge}</span>
       </div>
 
       <div className="space-y-3 p-4">
         <details>
-          <summary className="cursor-pointer text-xs font-semibold">工具参数</summary>
-          <pre className="mt-2 overflow-x-auto rounded-xl bg-white/70 p-3 text-xs leading-5 text-slate-700">{formatJson(call.arguments)}</pre>
+          <summary className="cursor-pointer text-xs font-semibold text-ink marker:text-muted">工具参数</summary>
+          <pre className="mt-2 max-h-60 overflow-auto rounded-lg border border-line bg-white p-3 font-mono text-xs leading-5 text-ink/80">{formatJson(call.arguments)}</pre>
         </details>
 
         {call.result !== null && (
           <details open>
-            <summary className="cursor-pointer text-xs font-semibold">工具返回结果</summary>
-            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded-xl bg-white/70 p-3 text-xs leading-5 text-slate-700">{formatJson(call.result)}</pre>
+            <summary className="cursor-pointer text-xs font-semibold text-ink marker:text-muted">工具返回结果</summary>
+            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-line bg-white p-3 font-mono text-xs leading-5 text-ink/80">{formatJson(call.result)}</pre>
           </details>
         )}
 
         {call.error_message && (
-          <div className="rounded-xl bg-white/70 p-3">
+          <div className="rounded-lg border border-danger/20 bg-[#fff5f4] p-3 text-danger">
             <p className="text-xs font-semibold">错误信息</p>
             <p className="mt-1 break-words text-xs leading-5">{call.error_message}</p>
             {call.error_code && <p className="mt-1 font-mono text-[11px] opacity-70">{call.error_code}</p>}
@@ -89,31 +89,31 @@ function ToolCallCard({ call }: { call: ToolCall }) {
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
   const isTool = message.role === "tool";
-  const label = isUser ? "你" : isTool ? "工具" : "AI";
+  const label = isUser ? "你" : isTool ? "工具" : "助手";
 
   return (
     <article className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
-      <div className={`grid size-9 shrink-0 place-items-center rounded-xl text-xs font-bold ${
+      <div className={`grid size-9 shrink-0 place-items-center rounded-xl border text-xs font-semibold ${
         isUser
-          ? "bg-slate-900 text-white"
+          ? "border-ink bg-ink text-white"
           : isTool
-            ? "bg-amber-100 text-amber-700"
-            : "bg-violet-100 text-violet-700"
+            ? "border-warning/20 bg-[#fff8eb] text-warning"
+            : "border-brand/15 bg-[#eef5f1] text-brand"
       }`}>
-        {isTool ? "⚙" : label}
+        {isTool ? "T" : isUser ? "你" : "助"}
       </div>
-      <div className={`max-w-[min(80%,42rem)] rounded-3xl px-4 py-3 ${
+      <div className={`max-w-[min(82%,44rem)] rounded-2xl px-4 py-3 shadow-sm ${
         isUser
           ? "rounded-tr-md bg-brand text-white"
           : isTool
-            ? "rounded-tl-md border border-amber-100 bg-amber-50 text-amber-950"
-            : "rounded-tl-md border border-slate-100 bg-slate-50 text-slate-800"
+            ? "rounded-tl-md border border-warning/15 bg-[#fff8eb] text-ink"
+            : "rounded-tl-md border border-line bg-panel text-ink"
       }`}>
-        <p className="mb-1 text-[11px] font-semibold opacity-60">{label}</p>
+        <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold opacity-65">
+          <span>{label}</span>
+          <time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time>
+        </div>
         <p className="whitespace-pre-wrap break-words text-sm leading-7">{message.content}</p>
-        <time className={`mt-1.5 block text-[11px] ${isUser ? "text-violet-200" : "text-slate-400"}`} dateTime={message.created_at}>
-          {formatMessageTime(message.created_at)}
-        </time>
       </div>
     </article>
   );
@@ -134,7 +134,7 @@ export function MessageTimeline({ messages, toolCalls }: MessageTimelineProps) {
         });
 
         return (
-          <div className="space-y-3" key={message.id}>
+          <div className="relative space-y-3 before:absolute before:left-[18px] before:top-12 before:h-[calc(100%-3rem)] before:w-px before:bg-line last:before:hidden" key={message.id}>
             <MessageBubble message={message} />
             {relatedCalls.map((call) => <ToolCallCard call={call} key={call.id} />)}
           </div>
