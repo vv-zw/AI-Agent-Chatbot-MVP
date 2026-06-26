@@ -1,7 +1,8 @@
-from functools import lru_cache
+﻿from functools import lru_cache
+from typing import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -10,14 +11,17 @@ class Settings(BaseSettings):
     app_host: str = "127.0.0.1"
     app_port: int = 8000
     database_url: str = "sqlite:///./data/chatbot.db"
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    cors_origins: Annotated[list[str], NoDecode] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
     max_context_messages: int = 20
     max_user_message_length: int = 10_000
 
     llm_provider: str = "mock"
     openai_api_key: str | None = None
-    openai_base_url: str = "https://api.openai.com/v1"
-    openai_model: str = "gpt-4.1-mini"
+    openai_base_url: str | None = "https://api.openai.com/v1"
+    openai_model: str | None = "gpt-4.1-mini"
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
@@ -36,6 +40,14 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_provider(cls, value: str) -> str:
         return value.strip().lower()
+
+    @field_validator("openai_api_key", "openai_base_url", "openai_model", mode="before")
+    @classmethod
+    def normalize_optional_openai_value(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
 
 
 @lru_cache

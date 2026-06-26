@@ -1,6 +1,6 @@
-from fastapi import APIRouter
+﻿from fastapi import APIRouter
 
-from app.core.config import get_settings
+from app.core.llm_provider_state import runtime_llm_provider_state
 from app.schemas.common import ApiResponse
 
 router = APIRouter(tags=["health"])
@@ -8,11 +8,9 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health", response_model=ApiResponse[dict[str, str]])
 def health_check() -> ApiResponse[dict[str, str]]:
-    settings = get_settings()
     return ApiResponse(
         data={
             "status": "ok",
-            "provider": settings.llm_provider,
+            "provider": runtime_llm_provider_state.provider,
         }
     )
-

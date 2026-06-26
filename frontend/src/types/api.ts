@@ -1,5 +1,6 @@
-export type MessageRole = "user" | "assistant" | "tool";
+﻿export type MessageRole = "user" | "assistant" | "tool";
 export type ToolCallStatus = "pending" | "succeeded" | "failed";
+export type LLMProviderName = "mock" | "openai";
 
 export interface ApiSuccessResponse<T> {
   data: T;
@@ -20,6 +21,21 @@ export interface ApiErrorResponse {
 export interface HealthStatus {
   status: string;
   provider: string;
+}
+
+export interface LLMProviderStatus {
+  provider: LLMProviderName;
+  available_providers: LLMProviderName[];
+  openai_configured: boolean;
+}
+
+export interface LLMProviderSwitchRequest {
+  provider: LLMProviderName;
+}
+
+export interface LLMProviderSwitchResponse {
+  provider: LLMProviderName;
+  openai_configured: boolean;
 }
 
 export interface ChatSession {

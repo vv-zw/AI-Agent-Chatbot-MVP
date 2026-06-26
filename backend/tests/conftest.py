@@ -1,15 +1,18 @@
-import os
+﻿import os
 from collections.abc import Generator
 
 os.environ["LLM_PROVIDER"] = "mock"
 os.environ["OPENAI_API_KEY"] = ""
+os.environ["CORS_ORIGINS"] = "http://localhost:5173,http://127.0.0.1:5173"
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, delete
 
+from app.core.config import get_settings
 from app.core.database import get_db_session
+from app.core.llm_provider_state import runtime_llm_provider_state
 from app.main import app
 from app.models import Message, SessionRecord, Todo, ToolCall
 
@@ -32,6 +35,8 @@ app.dependency_overrides[get_db_session] = override_db_session
 
 @pytest.fixture(autouse=True)
 def clean_database() -> Generator[None, None, None]:
+    get_settings.cache_clear()
+    runtime_llm_provider_state.reset("mock")
     with Session(TEST_ENGINE) as session:
         session.exec(delete(ToolCall))
         session.exec(delete(Todo))
@@ -39,6 +44,8 @@ def clean_database() -> Generator[None, None, None]:
         session.exec(delete(SessionRecord))
         session.commit()
     yield
+    get_settings.cache_clear()
+    runtime_llm_provider_state.reset("mock")
     with Session(TEST_ENGINE) as session:
         session.exec(delete(ToolCall))
         session.exec(delete(Todo))

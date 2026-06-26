@@ -1,4 +1,4 @@
-import json
+﻿import json
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -7,8 +7,10 @@ from sqlmodel import Session, select
 
 from app.core.config import Settings
 from app.core.errors import AppError
+from app.core.llm_provider_state import runtime_llm_provider_state, validate_openai_config
 from app.llm.base import LLMProvider
 from app.llm.mock import MockLLMProvider
+from app.llm.openai import OpenAICompatibleProvider
 from app.models import Message, MessageRole, SessionRecord, ToolCall, ToolCallStatus
 from app.schemas.chat import ChatResponse, MessageRead, ToolCallRead
 from app.tools.registry import (
@@ -39,17 +41,15 @@ def build_context(
 
 
 def get_llm_provider(settings: Settings) -> LLMProvider:
-    if settings.llm_provider == "mock":
+    provider_name = runtime_llm_provider_state.provider
+    if provider_name == "mock":
         return MockLLMProvider()
-    if not settings.openai_api_key:
-        raise AppError(
-            code="LLM_CONFIGURATION_ERROR",
-            message="当前 LLM Provider 缺少 API Key，请配置后重试。",
-            status_code=503,
-        )
+    if provider_name == "openai":
+        validate_openai_config(settings)
+        return OpenAICompatibleProvider(settings)
     raise AppError(
         code="LLM_PROVIDER_UNSUPPORTED",
-        message=f"当前版本尚未支持 LLM Provider：{settings.llm_provider}。",
+        message=f"当前版本尚未支持 LLM Provider：{provider_name}。",
         status_code=503,
     )
 
@@ -267,3 +267,5 @@ class AgentService:
             ensure_ascii=False,
             separators=(",", ":"),
         )
+
+

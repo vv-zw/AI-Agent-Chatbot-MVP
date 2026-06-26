@@ -1,9 +1,10 @@
-import pytest
+﻿import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app.agents.service import build_context
 from app.core.config import Settings
+from app.core.llm_provider_state import runtime_llm_provider_state
 from app.models import Message, MessageRole, SessionRecord
 from app.tools.registry import ToolContext, ToolNotFoundError, tool_registry
 from conftest import TEST_ENGINE
@@ -39,10 +40,11 @@ def test_missing_api_key_returns_unified_error(
 ) -> None:
     from app.api.v1.routes import sessions
 
+    runtime_llm_provider_state.reset("openai")
     monkeypatch.setattr(
         sessions,
         "get_settings",
-        lambda: Settings(llm_provider="openai", openai_api_key=None),
+        lambda: Settings(llm_provider="mock", openai_api_key=None),
     )
     response = client.post(
         f"/api/v1/sessions/{session_id}/messages",
@@ -51,7 +53,7 @@ def test_missing_api_key_returns_unified_error(
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "LLM_CONFIGURATION_ERROR"
-    assert "API Key" in response.json()["error"]["message"]
+    assert "OPENAI_API_KEY" in response.json()["error"]["details"]["missing"]
 
 
 def test_unregistered_tool_is_rejected() -> None:

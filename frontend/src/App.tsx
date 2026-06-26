@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ChatComposer } from "./components/ChatComposer";
 import { MessageTimeline } from "./components/MessageTimeline";
+import { ProviderSwitcher } from "./components/ProviderSwitcher";
 import { LogoMark, SessionSidebar } from "./components/SessionSidebar";
 import { api } from "./lib/api";
-import type { ChatMessage, ChatSession, ToolCall } from "./types/api";
+import type { ChatMessage, ChatSession, LLMProviderName, LLMProviderStatus, ToolCall } from "./types/api";
 
 const MAX_USER_MESSAGE_LENGTH = 10_000;
 
@@ -17,9 +18,13 @@ export default function App() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
+  const [providerStatus, setProviderStatus] = useState<LLMProviderStatus | null>(null);
+  const [providerMessage, setProviderMessage] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
+  const [isLoadingProvider, setIsLoadingProvider] = useState(true);
+  const [isSwitchingProvider, setIsSwitchingProvider] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +63,28 @@ export default function App() {
 
     void (async () => {
       try {
+        const status = await api.getLLMProvider();
+        if (isCancelled) return;
+        setProviderStatus(status);
+      } catch (caught) {
+        if (!isCancelled) {
+          setProviderMessage(getErrorMessage(caught, "LLM 模式状态加载失败。"));
+        }
+      } finally {
+        if (!isCancelled) setIsLoadingProvider(false);
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    void (async () => {
+      try {
         const items = await api.listSessions();
         if (isCancelled) return;
         setSessions(items);
@@ -75,6 +102,27 @@ export default function App() {
       isCancelled = true;
     };
   }, [loadSession]);
+
+  async function switchProvider(provider: LLMProviderName) {
+    if (isSwitchingProvider || providerStatus?.provider === provider) return;
+    setIsSwitchingProvider(true);
+    setProviderMessage(null);
+    setError(null);
+
+    try {
+      const result = await api.switchLLMProvider({ provider });
+      setProviderStatus((current) => ({
+        available_providers: current?.available_providers ?? ["mock", "openai"],
+        provider: result.provider,
+        openai_configured: result.openai_configured,
+      }));
+      setProviderMessage(result.provider === "openai" ? "已切换到真实 API 模式。" : "已切换回 Mock 模式，工具调用演示可继续使用。");
+    } catch (caught) {
+      setProviderMessage(getErrorMessage(caught, "LLM 模式切换失败，请稍后重试。"));
+    } finally {
+      setIsSwitchingProvider(false);
+    }
+  }
 
   async function createSession() {
     if (isCreating || isSending) return;
@@ -150,7 +198,7 @@ export default function App() {
         />
 
         <section className="flex min-h-screen min-w-0 flex-col bg-white md:min-h-0">
-          <header className="flex min-h-20 items-center gap-3 border-b border-slate-100 px-4 sm:px-7">
+          <header className="flex min-h-20 flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3 sm:px-7">
             <div className="md:hidden"><LogoMark /></div>
             <div className="min-w-0 flex-1">
               <h1 className="truncate font-semibold text-slate-900">{activeSession?.title ?? "开始新对话"}</h1>
@@ -158,6 +206,13 @@ export default function App() {
                 {activeSession ? "会话消息已同步至服务端" : "新建一个会话，开始与 AI 助手交流"}
               </p>
             </div>
+            <ProviderSwitcher
+              isLoading={isLoadingProvider}
+              isSwitching={isSwitchingProvider}
+              message={providerMessage}
+              onSwitch={(provider) => void switchProvider(provider)}
+              status={providerStatus}
+            />
             <div className="flex items-center gap-2 md:hidden">
               {sessions.length > 0 && (
                 <select aria-label="选择会话" className="max-w-32 rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs outline-none" disabled={isSending} onChange={(event) => void loadSession(event.target.value)} value={activeSessionId ?? ""}>

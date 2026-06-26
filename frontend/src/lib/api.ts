@@ -1,10 +1,13 @@
-import type {
+﻿import type {
   ApiErrorResponse,
   ApiSuccessResponse,
   ChatRequest,
   ChatResponse,
   ChatSession,
   HealthStatus,
+  LLMProviderStatus,
+  LLMProviderSwitchRequest,
+  LLMProviderSwitchResponse,
   SessionCreateRequest,
   SessionDetail,
 } from "../types/api";
@@ -92,6 +95,14 @@ function sessionPath(sessionId: string) {
 
 export const api = {
   getHealth: () => request<HealthStatus>("/health"),
+
+  getLLMProvider: () => request<LLMProviderStatus>("/llm/provider"),
+
+  switchLLMProvider: (payload: LLMProviderSwitchRequest) =>
+    request<LLMProviderSwitchResponse>("/llm/provider", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   listSessions: () => request<ChatSession[]>("/sessions"),
 
