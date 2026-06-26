@@ -4,16 +4,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: "#1f2933",
-        muted: "#6b7280",
-        canvas: "#f4f5f2",
-        panel: "#fbfbf8",
-        line: "#e2e0d8",
-        brand: "#2f5d50",
-        accent: "#b46a3c",
-        success: "#2f7d57",
+        ink: "#2e293b",
+        muted: "#776f86",
+        canvas: "#f8f5ee",
+        panel: "#fffdf8",
+        parchment: "#faf7f0",
+        line: "#e8dcc8",
+        brand: "#6d5bd0",
+        brandDeep: "#4c3f9f",
+        accent: "#d6a84f",
+        success: "#2f9e7e",
         warning: "#b7791f",
-        danger: "#b42318",
+        danger: "#d94c4c",
       },
       fontFamily: {
         sans: [
@@ -30,8 +32,13 @@ export default {
         mono: ["JetBrains Mono", "SFMono-Regular", "Consolas", "monospace"],
       },
       boxShadow: {
-        shell: "0 28px 70px rgb(31 41 51 / 0.12)",
-        soft: "0 14px 32px rgb(31 41 51 / 0.08)",
+        shell: "0 28px 80px rgb(80 63 120 / 0.16)",
+        soft: "0 14px 32px rgb(80 63 120 / 0.10)",
+        scroll: "0 10px 28px rgb(109 91 208 / 0.14)",
+      },
+      backgroundImage: {
+        parchment: "linear-gradient(180deg, #fffdf8 0%, #faf7f0 100%)",
+        arcana: "radial-gradient(circle at 18px 18px, rgb(214 168 79 / 0.18) 1px, transparent 1px)",
       },
     },
   },

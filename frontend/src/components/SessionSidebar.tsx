@@ -22,8 +22,9 @@ function formatSessionTime(value: string) {
 
 export function LogoMark() {
   return (
-    <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-brand/15 bg-brand text-sm font-semibold text-white shadow-soft">
-      AG
+    <div className="relative grid size-11 shrink-0 place-items-center rounded-2xl border border-brand/25 bg-[#f3edff] text-sm font-semibold text-brandDeep shadow-scroll">
+      <span className="absolute -right-1 -top-1 size-3 rounded-full border border-accent/40 bg-accent/80" />
+      TA
     </div>
   );
 }
@@ -38,43 +39,45 @@ export function SessionSidebar({
   onSelectSession,
 }: SessionSidebarProps) {
   return (
-    <aside className="hidden min-h-0 flex-col border-r border-line bg-[#f7f7f2] p-5 text-ink md:flex">
-      <div className="flex items-center gap-3 px-1">
-        <LogoMark />
-        <div>
-          <p className="text-sm font-semibold tracking-tight">Agent Desk</p>
-          <p className="mt-0.5 text-xs text-muted">任务协作与执行记录</p>
+    <aside className="hidden min-h-0 flex-col border-r border-line bg-[#f4eddf] p-5 text-ink md:flex">
+      <div className="rounded-2xl border border-line bg-panel/80 p-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <LogoMark />
+          <div>
+            <p className="text-sm font-semibold tracking-tight">ToolMind Arcana</p>
+            <p className="mt-0.5 text-xs text-muted">Agent 工具魔法工坊</p>
+          </div>
         </div>
       </div>
 
       <button
-        className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-[#264d43] focus:outline-none focus:ring-4 focus:ring-brand/15 disabled:opacity-60"
+        className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-brand/20 bg-brand px-4 py-3 text-sm font-semibold text-white shadow-scroll transition hover:bg-brandDeep focus:outline-none focus:ring-4 focus:ring-brand/15 disabled:opacity-60"
         disabled={isCreating || interactionDisabled}
         onClick={onCreateSession}
         type="button"
       >
-        <span className="text-lg leading-none">{isCreating ? "···" : "＋"}</span>
-        {isCreating ? "正在新建" : "新建会话"}
+        <span className="text-base leading-none">{isCreating ? "···" : "✦"}</span>
+        {isCreating ? "正在开启" : "开启新卷轴"}
       </button>
 
       <div className="mt-7 flex min-h-0 flex-1 flex-col">
         <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-          最近会话
+          会话档案
         </p>
-        <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1" aria-label="会话列表">
+        <nav className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1" aria-label="会话列表">
           {isLoading && sessions.length === 0 && (
             <div className="space-y-2" aria-label="正在加载会话">
               {[0, 1, 2].map((item) => (
-                <div className="h-16 animate-pulse rounded-xl bg-[#ecebe4]" key={item} />
+                <div className="h-[4.25rem] animate-pulse rounded-2xl border border-line bg-panel/70" key={item} />
               ))}
             </div>
           )}
 
           {!isLoading && sessions.length === 0 && (
-            <div className="rounded-xl border border-dashed border-line bg-panel px-4 py-8 text-center">
-              <p className="text-sm text-ink">暂无历史会话</p>
+            <div className="rounded-2xl border border-dashed border-line bg-panel/75 px-4 py-8 text-center">
+              <p className="text-sm font-medium text-ink">暂无卷轴</p>
               <p className="mt-1 text-xs leading-5 text-muted">
-                新建会话后会显示在这里
+                开启新会话后会收纳在这里
               </p>
             </div>
           )}
@@ -84,18 +87,20 @@ export function SessionSidebar({
             return (
               <button
                 aria-current={isActive ? "page" : undefined}
-                className={`group w-full rounded-xl border px-3.5 py-3 text-left transition focus:outline-none focus:ring-4 focus:ring-brand/10 ${
+                className={`group relative w-full rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus:ring-4 focus:ring-brand/10 ${
                   isActive
-                    ? "border-brand/25 bg-white text-ink shadow-soft"
-                    : "border-transparent text-muted hover:border-line hover:bg-white hover:text-ink"
+                    ? "border-brand/35 bg-panel text-ink shadow-scroll"
+                    : "border-line/70 bg-[#fbf6eb]/70 text-muted hover:border-brand/20 hover:bg-panel hover:text-ink"
                 }`}
                 disabled={interactionDisabled}
                 key={session.id}
                 onClick={() => onSelectSession(session.id)}
                 type="button"
               >
-                <span className="block truncate text-sm font-medium">{session.title}</span>
-                <span className={`mt-1 block text-xs ${isActive ? "text-brand" : "text-muted/70"}`}>
+                <span className={`absolute left-0 top-3 h-8 w-1 rounded-r-full ${isActive ? "bg-accent" : "bg-transparent group-hover:bg-brand/25"}`} />
+                <span className="block truncate text-sm font-semibold">{session.title}</span>
+                <span className={`mt-1 flex items-center gap-1.5 text-xs ${isActive ? "text-brandDeep" : "text-muted/75"}`}>
+                  <span className="size-1.5 rounded-full bg-current opacity-60" />
                   更新于 {formatSessionTime(session.updated_at)}
                 </span>
               </button>
@@ -104,13 +109,13 @@ export function SessionSidebar({
         </nav>
       </div>
 
-      <div className="mt-4 rounded-xl border border-line bg-panel p-4">
-        <div className="flex items-center gap-2 text-xs font-medium text-ink">
+      <div className="mt-4 rounded-2xl border border-line bg-panel/80 p-4 shadow-sm">
+        <div className="flex items-center gap-2 text-xs font-semibold text-ink">
           <span className="size-2 rounded-full bg-success" />
-          服务端已连接
+          后端服务已连接
         </div>
         <p className="mt-2 text-xs leading-5 text-muted">
-          会话与消息由服务端持久化保存
+          会话、消息与工具施放记录会同步保存
         </p>
       </div>
     </aside>
