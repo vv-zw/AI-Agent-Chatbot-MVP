@@ -53,6 +53,53 @@ def test_time_tool_call(client: TestClient, session_id: str) -> None:
     assert tool_call["status"] == "succeeded"
     assert set(tool_call["result"]) == {"date", "time", "timezone", "weekday"}
 
+def test_mock_lists_available_tools(client: TestClient, session_id: str) -> None:
+    response = send_message(client, session_id, "你都有哪些工具可以调用")
+
+    assert response.status_code == 201
+    data = response.json()["data"]
+    assert "Mock 模式目前可以演示基础聊天和 3 个本地工具" in data["assistant_message"]["content"]
+    assert "get_current_time" in data["assistant_message"]["content"]
+    assert "calculator" in data["assistant_message"]["content"]
+    assert "todo_tool" in data["assistant_message"]["content"]
+    assert data["tool_calls"] == []
+
+
+def test_mock_describes_current_mode_features(client: TestClient, session_id: str) -> None:
+    for prompt in (
+        "你现在的这个模式都能实现哪些功能",
+        "你都能做什么，可以完成哪些工具调用",
+        "你都能做什么",
+        "你有什么能力",
+        "Mock 模式支持什么功能",
+    ):
+        response = send_message(client, session_id, prompt)
+
+        assert response.status_code == 201
+        content = response.json()["data"]["assistant_message"]["content"]
+        assert "基础聊天" in content
+        assert "get_current_time" in content
+        assert "calculator" in content
+        assert "todo_tool" in content
+
+
+def test_mock_intro_short_phrase(client: TestClient, session_id: str) -> None:
+    response = send_message(client, session_id, "介绍自己")
+
+    assert response.status_code == 201
+    content = response.json()["data"]["assistant_message"]["content"]
+    assert "Mock AI 助手" in content
+    assert "待办" in content
+
+
+def test_mock_short_todo_lists_items(client: TestClient, session_id: str) -> None:
+    response = send_message(client, session_id, "待办")
+
+    assert response.status_code == 201
+    data = response.json()["data"]
+    assert data["tool_calls"][0]["tool_name"] == "todo_tool"
+    assert data["tool_calls"][0]["status"] == "succeeded"
+    assert "待办" in data["assistant_message"]["content"]
 
 def test_calculator_tool_call(client: TestClient, session_id: str) -> None:
     response = send_message(client, session_id, "帮我算一下 128 * 36 + 520")
@@ -220,3 +267,17 @@ def test_messages_and_tool_calls_are_isolated_by_session(client: TestClient) -> 
     assert len(first_detail["tool_calls"]) == 1
     assert second_detail["messages"] == []
     assert second_detail["tool_calls"] == []
+
+def test_delete_session_removes_related_records(client: TestClient, session_id: str) -> None:
+    sent = send_message(client, session_id, "现在几点？")
+    assert sent.status_code == 201
+
+    deleted = client.delete(f"/api/v1/sessions/{session_id}")
+    assert deleted.status_code == 200
+    assert deleted.json()["data"] == {"id": session_id, "status": "deleted"}
+
+    detail = client.get(f"/api/v1/sessions/{session_id}")
+    assert detail.status_code == 404
+
+    listed = client.get("/api/v1/sessions")
+    assert session_id not in [item["id"] for item in listed.json()["data"]]

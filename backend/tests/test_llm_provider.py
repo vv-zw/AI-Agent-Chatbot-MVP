@@ -1,4 +1,4 @@
-﻿from typing import Any
+from typing import Any
 
 import httpx
 from fastapi.testclient import TestClient
@@ -150,6 +150,68 @@ def test_openai_provider_timeout_maps_to_unified_error(monkeypatch) -> None:
     else:
         raise AssertionError("Expected timeout error")
 
+
+
+
+def test_mode_status_question_uses_request_provider(client: TestClient, session_id: str) -> None:
+    mock_response = client.post(
+        f"/api/v1/sessions/{session_id}/messages",
+        json={"content": "现在是什么模式", "provider": "mock"},
+    )
+    assert mock_response.status_code == 201
+    mock_content = mock_response.json()["data"]["assistant_message"]["content"]
+    assert "Mock 演示模式" in mock_content
+    assert "[Mock] 我收到了" not in mock_content
+
+    openai_response = client.post(
+        f"/api/v1/sessions/{session_id}/messages",
+        json={"content": "现在是什么模式", "provider": "openai"},
+    )
+    assert openai_response.status_code == 201
+    openai_content = openai_response.json()["data"]["assistant_message"]["content"]
+    assert "真实接口模式" in openai_content
+    assert "当前是 **Mock 演示模式" not in openai_content
+
+def test_message_provider_override_uses_openai_even_when_runtime_is_mock(
+    client: TestClient,
+    session_id: str,
+    monkeypatch,
+) -> None:
+    class FakeOpenAIProvider:
+        def complete(self, messages: list[dict[str, str]]):
+            from app.llm.base import LLMResult
+
+            return LLMResult(content="请求级真实接口回复")
+
+        def complete_with_tool_result(
+            self,
+            messages: list[dict[str, str]],
+            tool_name: str,
+            result: dict[str, Any],
+        ) -> str:
+            return "工具模式未启用"
+
+    runtime_llm_provider_state.reset("mock")
+    monkeypatch.setattr(
+        "app.api.v1.routes.sessions.get_settings",
+        lambda: Settings(
+            llm_provider="mock",
+            openai_api_key="test-key",
+            openai_base_url="https://api.deepseek.com",
+            openai_model="deepseek-chat",
+        ),
+    )
+    monkeypatch.setattr("app.agents.service.OpenAICompatibleProvider", lambda settings: FakeOpenAIProvider())
+
+    response = client.post(
+        f"/api/v1/sessions/{session_id}/messages",
+        json={"content": "介绍一下自己", "provider": "openai"},
+    )
+
+    assert response.status_code == 201
+    data = response.json()["data"]
+    assert data["assistant_message"]["content"] == "请求级真实接口回复"
+    assert data["tool_calls"] == []
 
 def test_openai_mode_plain_chat_can_use_mocked_provider(
     client: TestClient,

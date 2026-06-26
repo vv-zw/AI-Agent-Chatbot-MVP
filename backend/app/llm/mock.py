@@ -24,7 +24,10 @@ class MockLLMProvider:
                 )
             )
 
-        if "我有哪些待办" in latest or "我的待办" in latest:
+        if any(
+            keyword in latest
+            for keyword in ("我有哪些待办", "我的待办", "待办列表", "列出待办")
+        ) or latest in ("待办", "待办？", "待办事项", "待办事项？"):
             return LLMResult(
                 tool_call=ToolCallRequest(
                     name="todo_tool",
@@ -65,11 +68,64 @@ class MockLLMProvider:
                     )
             return LLMResult(content="你还没有在当前会话中告诉我项目名称。")
 
-        if any(keyword in latest for keyword in ("介绍一下你自己", "介绍一下自己")):
+        if any(
+            keyword in latest
+            for keyword in (
+                "哪些工具",
+                "有什么工具",
+                "可以调用什么",
+                "能调用什么",
+                "工具可以调用",
+                "哪些功能",
+                "什么功能",
+                "实现哪些功能",
+                "能实现",
+                "能做什么",
+                "都能做什么",
+                "可以完成哪些",
+                "完成哪些工具调用",
+                "哪些工具调用",
+                "工具调用",
+                "当前模式",
+                "这个模式",
+                "做什么",
+                "功能",
+                "能力",
+                "工具",
+                "能干嘛",
+                "可以干嘛",
+                "可以做",
+                "会做",
+                "会什么",
+                "支持什么",
+                "支持哪些",
+                "可用工具",
+            )
+        ):
+            return LLMResult(
+                content=(
+                    "Mock 模式目前可以演示基础聊天和 3 个本地工具：\n"
+                    "1. get_current_time：查询当前日期、时间和星期。\n"
+                    "2. calculator：计算只包含数字、括号和 + - * / 的四则表达式。\n"
+                    "3. todo_tool：在当前会话里创建或列出待办。"
+                )
+            )
+
+        if any(
+            keyword in latest
+            for keyword in (
+                "介绍一下你自己",
+                "介绍一下自己",
+                "介绍自己",
+                "你是谁",
+                "你能做什么",
+            )
+        ):
             return LLMResult(
                 content=(
                     "我是当前项目的 Mock AI 助手，可以进行基础对话，"
-                    "也可以调用时间、计算器和待办工具。"
+                    "也可以调用时间、计算器和待办工具。你可以问我当前时间、"
+                    "让我计算四则表达式，或让我记录和查看当前会话里的待办。"
                 )
             )
 
@@ -97,9 +153,7 @@ class MockLLMProvider:
                 f"{tool_result['weekday']}（{tool_result['timezone']}）。"
             )
         if tool_name == "calculator":
-            return (
-                f"计算结果：{tool_result['expression']} = {tool_result['value']}"
-            )
+            return f"计算结果：{tool_result['expression']} = {tool_result['value']}"
         if tool_name == "todo_tool" and tool_result.get("action") == "create":
             return f"已记下待办：{tool_result['todo']['title']}"
         if tool_name == "todo_tool" and tool_result.get("action") == "list":

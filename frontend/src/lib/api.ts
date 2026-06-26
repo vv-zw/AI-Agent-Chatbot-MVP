@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   ApiErrorResponse,
   ApiSuccessResponse,
   ChatRequest,
@@ -9,6 +9,7 @@
   LLMProviderSwitchRequest,
   LLMProviderSwitchResponse,
   SessionCreateRequest,
+  SessionDeleteResponse,
   SessionDetail,
 } from "../types/api";
 
@@ -114,6 +115,11 @@ export const api = {
 
   getSession: (sessionId: string) =>
     request<SessionDetail>(sessionPath(sessionId)),
+
+  deleteSession: (sessionId: string) =>
+    request<SessionDeleteResponse>(sessionPath(sessionId), {
+      method: "DELETE",
+    }),
 
   sendMessage: (sessionId: string, payload: ChatRequest) =>
     request<ChatResponse>(`${sessionPath(sessionId)}/messages`, {

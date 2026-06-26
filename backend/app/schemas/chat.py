@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -54,6 +54,7 @@ class SessionDetail(SessionRead):
 
 class ChatRequest(BaseModel):
     content: str
+    provider: Literal["mock", "openai"] | None = None
 
 
 class ChatResponse(BaseModel):

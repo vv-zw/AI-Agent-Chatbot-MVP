@@ -7,7 +7,7 @@ from app.agents.service import AgentService
 from app.api.deps import DatabaseSession
 from app.core.config import get_settings
 from app.core.errors import AppError
-from app.models import Message, SessionRecord, ToolCall
+from app.models import Message, SessionRecord, Todo, ToolCall
 from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
@@ -90,6 +90,23 @@ def get_session(
     )
 
 
+
+@router.delete("/{session_id}", response_model=ApiResponse[dict[str, str]])
+def delete_session(
+    session_id: UUID,
+    db: DatabaseSession,
+) -> ApiResponse[dict[str, str]]:
+    record = get_session_or_404(db, session_id)
+
+    for model in (ToolCall, Message, Todo):
+        items = db.exec(select(model).where(model.session_id == session_id)).all()
+        for item in items:
+            db.delete(item)
+
+    db.delete(record)
+    db.commit()
+    return ApiResponse(data={"id": str(session_id), "status": "deleted"})
+
 @router.post(
     "/{session_id}/messages",
     response_model=ApiResponse[ChatResponse],
@@ -117,5 +134,5 @@ def send_message(
             details={"max_length": settings.max_user_message_length},
         )
 
-    response = AgentService(settings).run(db, record, content)
+    response = AgentService(settings).run(db, record, content, provider_name=payload.provider)
     return ApiResponse(data=response)

@@ -1,4 +1,4 @@
-﻿export type MessageRole = "user" | "assistant" | "tool";
+export type MessageRole = "user" | "assistant" | "tool";
 export type ToolCallStatus = "pending" | "succeeded" | "failed";
 export type LLMProviderName = "mock" | "openai";
 
@@ -77,8 +77,14 @@ export interface SessionCreateRequest {
   title?: string;
 }
 
+export interface SessionDeleteResponse {
+  id: string;
+  status: "deleted";
+}
+
 export interface ChatRequest {
   content: string;
+  provider?: LLMProviderName;
 }
 
 export interface ChatResponse {

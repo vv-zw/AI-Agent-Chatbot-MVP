@@ -1,4 +1,4 @@
-﻿import json
+import json
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -40,18 +40,54 @@ def build_context(
     ]
 
 
-def get_llm_provider(settings: Settings) -> LLMProvider:
-    provider_name = runtime_llm_provider_state.provider
-    if provider_name == "mock":
+def normalize_provider_name(provider_name: str | None = None) -> str:
+    return (provider_name or runtime_llm_provider_state.provider).strip().lower()
+
+
+def get_llm_provider(settings: Settings, provider_name: str | None = None) -> LLMProvider:
+    normalized_provider = normalize_provider_name(provider_name)
+    if normalized_provider == "mock":
         return MockLLMProvider()
-    if provider_name == "openai":
+    if normalized_provider == "openai":
         validate_openai_config(settings)
         return OpenAICompatibleProvider(settings)
     raise AppError(
         code="LLM_PROVIDER_UNSUPPORTED",
-        message=f"当前版本尚未支持 LLM Provider：{provider_name}。",
+        message=f"当前版本尚未支持 LLM Provider：{normalized_provider}。",
         status_code=503,
     )
+
+
+def is_mode_status_question(content: str) -> bool:
+    normalized = content.strip().replace(" ", "")
+    return any(
+        keyword in normalized
+        for keyword in (
+            "现在是什么模式",
+            "当前是什么模式",
+            "现在用的什么模式",
+            "当前用的什么模式",
+            "现在是哪种模式",
+            "当前是哪种模式",
+            "模型模式是什么",
+            "现在是什么模型模式",
+            "当前是什么模型模式",
+        )
+    )
+
+
+def build_mode_status_reply(provider_name: str) -> str:
+    if provider_name == "mock":
+        return (
+            "当前是 **Mock 演示模式**。普通问答由本地 Mock 规则处理；"
+            "时间、计算器和待办工具调用都是本地模拟演示，不会请求真实模型 API。"
+        )
+    if provider_name == "openai":
+        return (
+            "当前是 **真实接口模式**（DeepSeek / OpenAI-compatible）。"
+            "普通聊天会请求真实模型；时间、计算器和待办工具请切回 Mock 演示模式使用。"
+        )
+    return f"当前模式未知：{provider_name}。"
 
 
 class AgentService:
@@ -68,8 +104,9 @@ class AgentService:
         db: Session,
         session_record: SessionRecord,
         content: str,
+        provider_name: str | None = None,
     ) -> ChatResponse:
-        provider = get_llm_provider(self.settings)
+        normalized_provider = normalize_provider_name(provider_name)
         user_message = Message(
             session_id=session_record.id,
             role=MessageRole.USER,
@@ -82,65 +119,69 @@ class AgentService:
         db.add(session_record)
         db.flush()
 
-        context = build_context(
-            db,
-            session_record.id,
-            self.settings.max_context_messages,
-        )
-        try:
-            llm_result = provider.complete(context)
-        except AppError:
-            raise
-        except Exception as exc:
-            raise AppError(
-                code="LLM_CALL_FAILED",
-                message="LLM 调用失败，请稍后重试。",
-                status_code=502,
-            ) from exc
-
         tool_calls: list[ToolCall] = []
-        if llm_result.tool_call is not None:
-            tool_call = self._execute_tool(
-                db=db,
-                session_id=session_record.id,
-                name=llm_result.tool_call.name,
-                arguments=llm_result.tool_call.arguments,
-            )
-            tool_calls.append(tool_call)
-            tool_message = Message(
-                session_id=session_record.id,
-                role=MessageRole.TOOL,
-                content=self._build_tool_message_content(tool_call),
-                metadata_json={
-                    "tool_call_id": str(tool_call.id),
-                    "tool_name": tool_call.tool_name,
-                    "status": tool_call.status.value,
-                },
-            )
-            db.add(tool_message)
-            db.flush()
-            tool_call.tool_message_id = tool_message.id
-            db.add(tool_call)
-
+        if is_mode_status_question(content):
+            assistant_content = build_mode_status_reply(normalized_provider)
+        else:
+            provider = get_llm_provider(self.settings, normalized_provider)
             context = build_context(
                 db,
                 session_record.id,
                 self.settings.max_context_messages,
             )
             try:
-                assistant_content = provider.complete_with_tool_result(
-                    context,
-                    tool_call.tool_name,
-                    self._tool_result_payload(tool_call),
-                )
+                llm_result = provider.complete(context)
+            except AppError:
+                raise
             except Exception as exc:
                 raise AppError(
                     code="LLM_CALL_FAILED",
-                    message="LLM 生成工具结果回复时失败，请稍后重试。",
+                    message="LLM 调用失败，请稍后重试。",
                     status_code=502,
                 ) from exc
-        else:
-            assistant_content = llm_result.content or ""
+
+            if llm_result.tool_call is not None:
+                tool_call = self._execute_tool(
+                    db=db,
+                    session_id=session_record.id,
+                    name=llm_result.tool_call.name,
+                    arguments=llm_result.tool_call.arguments,
+                )
+                tool_calls.append(tool_call)
+                tool_message = Message(
+                    session_id=session_record.id,
+                    role=MessageRole.TOOL,
+                    content=self._build_tool_message_content(tool_call),
+                    metadata_json={
+                        "tool_call_id": str(tool_call.id),
+                        "tool_name": tool_call.tool_name,
+                        "status": tool_call.status.value,
+                    },
+                )
+                db.add(tool_message)
+                db.flush()
+                tool_call.tool_message_id = tool_message.id
+                db.add(tool_call)
+
+                context = build_context(
+                    db,
+                    session_record.id,
+                    self.settings.max_context_messages,
+                )
+                try:
+                    assistant_content = provider.complete_with_tool_result(
+                        context,
+                        tool_call.tool_name,
+                        self._tool_result_payload(tool_call),
+                    )
+                except Exception as exc:
+                    raise AppError(
+                        code="LLM_CALL_FAILED",
+                        message="LLM 生成工具结果回复时失败，请稍后重试。",
+                        status_code=502,
+                    ) from exc
+            else:
+                assistant_content = llm_result.content or ""
 
         if not assistant_content.strip():
             raise AppError(
@@ -171,7 +212,6 @@ class AgentService:
             assistant_message=MessageRead.model_validate(assistant_message),
             tool_calls=[ToolCallRead.model_validate(item) for item in tool_calls],
         )
-
     def _execute_tool(
         self,
         db: Session,

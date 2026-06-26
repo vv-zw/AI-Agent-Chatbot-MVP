@@ -40,7 +40,7 @@ def use_provider(
     monkeypatch: pytest.MonkeyPatch,
     provider: FixedToolProvider,
 ) -> None:
-    monkeypatch.setattr(agent_service, "get_llm_provider", lambda settings: provider)
+    monkeypatch.setattr(agent_service, "get_llm_provider", lambda settings, provider_name=None: provider)
 
 
 def send_message(client: TestClient, session_id: str, content: str = "测试工具"):

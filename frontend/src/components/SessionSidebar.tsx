@@ -6,7 +6,9 @@ interface SessionSidebarProps {
   isLoading: boolean;
   isCreating: boolean;
   interactionDisabled: boolean;
+  deletingSessionId: string | null;
   onCreateSession: () => void;
+  onDeleteSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
 }
 
@@ -35,7 +37,9 @@ export function SessionSidebar({
   isLoading,
   isCreating,
   interactionDisabled,
+  deletingSessionId,
   onCreateSession,
+  onDeleteSession,
   onSelectSession,
 }: SessionSidebarProps) {
   return (
@@ -52,7 +56,7 @@ export function SessionSidebar({
 
       <button
         className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-brand/20 bg-brand px-4 py-3 text-sm font-semibold text-white shadow-scroll transition hover:bg-brandDeep focus:outline-none focus:ring-4 focus:ring-brand/15 disabled:opacity-60"
-        disabled={isCreating || interactionDisabled}
+        disabled={isCreating || interactionDisabled || Boolean(deletingSessionId)}
         onClick={onCreateSession}
         type="button"
       >
@@ -84,26 +88,45 @@ export function SessionSidebar({
 
           {sessions.map((session) => {
             const isActive = session.id === activeSessionId;
+            const isDeleting = deletingSessionId === session.id;
             return (
-              <button
-                aria-current={isActive ? "page" : undefined}
-                className={`group relative w-full rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus:ring-4 focus:ring-brand/10 ${
+              <div
+                className={`group relative flex items-stretch overflow-hidden rounded-2xl border transition focus-within:ring-4 focus-within:ring-brand/10 ${
                   isActive
                     ? "border-brand/35 bg-panel text-ink shadow-scroll"
                     : "border-line/70 bg-[#fbf6eb]/70 text-muted hover:border-brand/20 hover:bg-panel hover:text-ink"
                 }`}
-                disabled={interactionDisabled}
                 key={session.id}
-                onClick={() => onSelectSession(session.id)}
-                type="button"
               >
                 <span className={`absolute left-0 top-3 h-8 w-1 rounded-r-full ${isActive ? "bg-accent" : "bg-transparent group-hover:bg-brand/25"}`} />
-                <span className="block truncate text-sm font-semibold">{session.title}</span>
-                <span className={`mt-1 flex items-center gap-1.5 text-xs ${isActive ? "text-brandDeep" : "text-muted/75"}`}>
-                  <span className="size-1.5 rounded-full bg-current opacity-60" />
-                  更新于 {formatSessionTime(session.updated_at)}
-                </span>
-              </button>
+                <button
+                  aria-current={isActive ? "page" : undefined}
+                  className="min-w-0 flex-1 px-4 py-3 pr-2 text-left outline-none disabled:opacity-60"
+                  disabled={interactionDisabled || Boolean(deletingSessionId)}
+                  onClick={() => onSelectSession(session.id)}
+                  type="button"
+                >
+                  <span className="block truncate text-sm font-semibold">{session.title}</span>
+                  <span className={`mt-1 flex items-center gap-1.5 text-xs ${isActive ? "text-brandDeep" : "text-muted/75"}`}>
+                    <span className="size-1.5 rounded-full bg-current opacity-60" />
+                    更新于 {formatSessionTime(session.updated_at)}
+                  </span>
+                </button>
+                <button
+                  aria-label={`删除会话：${session.title}`}
+                  className="m-2 grid size-9 shrink-0 place-items-center rounded-xl border border-danger/15 bg-[#fff6f3] text-xs font-semibold text-danger opacity-75 transition hover:border-danger/30 hover:bg-[#ffeceb] hover:opacity-100 focus:outline-none focus:ring-4 focus:ring-danger/10 disabled:opacity-40"
+                  disabled={interactionDisabled || Boolean(deletingSessionId)}
+                  onClick={() => onDeleteSession(session.id)}
+                  title="删除会话"
+                  type="button"
+                >
+                  {isDeleting ? (
+                    <span className="size-3.5 animate-spin rounded-full border-2 border-danger/30 border-t-danger" />
+                  ) : (
+                    "×"
+                  )}
+                </button>
+              </div>
             );
           })}
         </nav>

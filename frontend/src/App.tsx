@@ -26,6 +26,7 @@ export default function App() {
   const [isLoadingProvider, setIsLoadingProvider] = useState(true);
   const [isSwitchingProvider, setIsSwitchingProvider] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isDeletingSession, setIsDeletingSession] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const detailRequestId = useRef(0);
@@ -144,6 +145,39 @@ export default function App() {
     }
   }
 
+  async function deleteSession(sessionId: string) {
+    if (isSending || isCreating || isDeletingSession) return;
+    const target = sessions.find((session) => session.id === sessionId);
+    const confirmed = window.confirm(`确定删除“${target?.title ?? "这条会话"}”吗？删除后不可恢复。`);
+    if (!confirmed) return;
+
+    setIsDeletingSession(sessionId);
+    setError(null);
+
+    try {
+      await api.deleteSession(sessionId);
+      const remaining = sessions.filter((session) => session.id !== sessionId);
+      setSessions(remaining);
+
+      if (activeSessionId === sessionId) {
+        detailRequestId.current += 1;
+        const nextSession = remaining[0] ?? null;
+        if (nextSession) {
+          await loadSession(nextSession.id);
+        } else {
+          setActiveSessionId(null);
+          setMessages([]);
+          setToolCalls([]);
+          setInput("");
+        }
+      }
+    } catch (caught) {
+      setError(getErrorMessage(caught, "删除会话失败，请稍后重试。"));
+    } finally {
+      setIsDeletingSession(null);
+    }
+  }
+
   async function sendMessage(content: string) {
     if (!activeSessionId || isSending) return;
     const sessionId = activeSessionId;
@@ -151,7 +185,10 @@ export default function App() {
     setError(null);
 
     try {
-      const result = await api.sendMessage(sessionId, { content });
+      const result = await api.sendMessage(sessionId, {
+        content,
+        provider: providerStatus?.provider ?? "mock",
+      });
       if (activeSessionId !== sessionId) return;
 
       setInput("");
@@ -192,7 +229,9 @@ export default function App() {
           isCreating={isCreating}
           isLoading={isLoadingSessions}
           interactionDisabled={isSending}
+          deletingSessionId={isDeletingSession}
           onCreateSession={() => void createSession()}
+          onDeleteSession={(sessionId) => void deleteSession(sessionId)}
           onSelectSession={(sessionId) => void loadSession(sessionId)}
           sessions={sessions}
         />
