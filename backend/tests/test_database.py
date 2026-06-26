@@ -9,7 +9,8 @@ from app.models import Message, Todo
 
 def test_legacy_sqlite_schema_is_migrated(tmp_path: Path) -> None:
     database_path = tmp_path / "legacy.db"
-    engine = create_engine(f"sqlite:///{database_path}")
+    database_url = f"sqlite:///{database_path.as_posix()}"
+    engine = create_engine(database_url)
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE sessions (id CHAR(32) PRIMARY KEY, title VARCHAR(120) NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)"))
         connection.execute(text("CREATE TABLE messages (id CHAR(32) PRIMARY KEY, session_id CHAR(32) NOT NULL, role VARCHAR(9) NOT NULL, content TEXT NOT NULL, created_at DATETIME NOT NULL)"))
