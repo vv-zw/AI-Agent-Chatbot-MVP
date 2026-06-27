@@ -32,8 +32,10 @@ AI Agent Chatbot MVP/
 │  │  ├─ schemas/             # Pydantic API 契约
 │  │  ├─ services/            # 助手角色定义等业务服务
 │  │  └─ tools/               # 工具白名单与执行器
+│  ├─ scripts/smoke_check.py  # 无 Key 冒烟检查
 │  ├─ tests/
 │  ├─ .env.example
+│  ├─ Dockerfile
 │  └─ requirements.txt
 ├─ frontend/
 │  ├─ src/
@@ -42,9 +44,12 @@ AI Agent Chatbot MVP/
 │  │  ├─ types/api.ts
 │  │  └─ App.tsx
 │  ├─ .env.example
+│  ├─ Dockerfile
+│  ├─ nginx.conf
 │  └─ package.json
 ├─ docs/
 ├─ .env.example
+├─ docker-compose.yml
 └─ README.md
 ```
 
@@ -293,6 +298,7 @@ POST /api/v1/sessions/{session_id}/messages/{message_id}/feedback
 | `GET` | `/api/v1/sessions` | 获取会话列表 |
 | `POST` | `/api/v1/sessions` | 创建会话 |
 | `GET` | `/api/v1/sessions/{session_id}` | 获取会话详情 |
+| `DELETE` | `/api/v1/sessions/{session_id}` | 删除会话及其关联数据 |
 | `PATCH` | `/api/v1/sessions/{session_id}/role` | 修改当前会话角色 |
 | `GET` | `/api/v1/sessions/{session_id}/knowledge/files` | 获取当前会话的知识库文件列表 |
 | `POST` | `/api/v1/sessions/{session_id}/knowledge/files` | 上传文本文件（multipart/form-data） |
@@ -501,6 +507,23 @@ npm run typecheck
 13. 切回 Mock 后，工具调用仍可用。
 14. 新建会话前选择不同助手角色，确认会话列表和页头显示正确。
 15. 在 Mock 模式下用同一问题验证不同角色的回复侧重点。
+
+## 录屏演示流程
+
+建议录制 6～8 分钟，使用默认 Mock 模式完成主体演示，不需要展示或配置真实 API Key：
+
+1. 展示项目目录和 README，说明技术栈、默认 Mock、无需 API Key。
+2. 启动后端和前端，打开健康检查或 Swagger，再进入 `http://localhost:5173`。
+3. 演示普通聊天；告知项目名称后追问名称，展示多轮上下文和流式增量输出。
+4. 依次演示时间、计算、待办创建与查询，展示对应工具卡片。
+5. 发送“现在几点？顺便帮我算一下 128 * 36 + 520”，展示多工具编排和多张工具卡片。
+6. 上传不含敏感信息的 `.txt` 或 `.md` 并提问；新建另一会话，说明资料按会话隔离。
+7. 切换代码或写作助手，用相同问题展示角色差异。
+8. 对 AI 回复提交反馈并刷新会话，展示反馈持久化；再删除一个测试会话。
+9. 点击“DeepSeek”，在未配置 Key 时展示清晰提示并切回 Mock。若自备 Key，可额外演示真实普通聊天，但不得暴露 Key 或 `.env`。
+10. 用终端展示 `pytest`、`npm run build` 和 `docker compose config` 的通过结果。
+
+录屏前建议使用全新的本地数据库或清理演示会话，并关闭可能显示密钥的终端、编辑器标签和浏览器开发者工具。
 
 ## 已知限制
 
