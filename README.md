@@ -10,6 +10,7 @@
 - React + Vite + TypeScript 前端。
 - SQLite 本地持久化会话、消息、工具调用和待办。
 - Mock LLM 默认启用，稳定支持工具调用演示。
+- 支持基于 SSE 的分段回复、工具阶段事件和前端增量展示，并保留普通发送 fallback。
 - 运行时 LLM Provider 切换：`mock` / `openai`。
 - OpenAI-compatible Provider 支持 DeepSeek 普通聊天。
 - 会话级助手角色切换，预置通用、代码、写作、面试 4 个角色。
@@ -250,7 +251,8 @@ POST /api/v1/llm/provider
 | `POST` | `/api/v1/sessions` | 创建会话 |
 | `GET` | `/api/v1/sessions/{session_id}` | 获取会话详情 |
 | `PATCH` | `/api/v1/sessions/{session_id}/role` | 修改当前会话角色 |
-| `POST` | `/api/v1/sessions/{session_id}/messages` | 发送消息 |
+| `POST` | `/api/v1/sessions/{session_id}/messages` | 普通发送消息（保留为 fallback） |
+| `POST` | `/api/v1/sessions/{session_id}/messages/stream` | 发送消息并返回 SSE 事件流 |
 
 成功响应：
 
@@ -269,6 +271,34 @@ POST /api/v1/llm/provider
   }
 }
 ```
+
+## 流式输出
+
+前端默认开启“流式输出”，发送后会立即显示用户消息，并逐段追加 Agent 回复。发送期间按钮、会话切换和角色切换会禁用；工具调用时展示“处理中 / 成功 / 失败”阶段，流结束后 assistant 消息变为完成状态。取消输入框下方的“流式输出已开启”复选框，即可改用原有普通接口作为 fallback。
+
+流式接口使用 `POST /api/v1/sessions/{session_id}/messages/stream`。之所以采用 POST 而不是浏览器原生 `EventSource` 的 GET，是为了继续使用与普通发送相同的 JSON 请求体：
+
+```json
+{
+  "content": "帮我计算 (8 + 4) / 3",
+  "provider": "mock"
+}
+```
+
+响应类型为 `text/event-stream`，事件按以下顺序出现：
+
+| 事件 | 含义 |
+|---|---|
+| `user_message_saved` | 用户消息已保存，返回正式消息记录 |
+| `tool_call_start` | 工具调用开始，包含 `status=pending` 的工具记录 |
+| `tool_call_result` | 工具执行结束，包含结果或结构化错误 |
+| `assistant_delta` | assistant 回复文本片段，前端直接追加 |
+| `assistant_done` | 流正常结束，返回与普通接口一致的完整 `ChatResponse` |
+| `error` | 流内错误，使用统一 `{ "error": { "code", "message", "details" } }` 契约 |
+
+服务端保证每条流以 `assistant_done` 或 `error` 结束；前端也会把没有终止事件的连接识别为中断，解除发送状态并显示错误，避免界面卡死。工具调用、`tool_calls` 记录和 `role=tool` 消息仍由原 Agent 流程统一持久化。
+
+当前实现优先保证 Mock 模式的可演示性：Mock 回复按固定长度切片并加入很短的片段间隔。真实 OpenAI-compatible 模式也可使用该接口，但当前是在完整模型响应返回后再分段下发，并非上游模型原生 token 流；后续可在不改变前端事件契约的前提下升级 Provider 原生流式调用。
 
 ## Mock 工具调用示例
 
@@ -370,6 +400,7 @@ Windows 环境下如系统临时目录权限受限，可显式执行 `python -m 
 - todo、消息和工具调用不跨 session 泄露。
 - 旧 SQLite schema 迁移兼容性。
 - 角色列表、默认/指定/非法角色、会话角色持久化和 Mock 角色差异。
+- SSE 流式普通回复、工具阶段事件、统一错误事件，以及普通发送接口回归。
 
 前端构建检查：
 
@@ -405,7 +436,7 @@ npm run typecheck
 
 - 真实 API 模式当前只保证普通聊天。
 - Mock LLM 基于规则和关键词，不等同真实模型推理能力。
-- 每轮最多一次工具调用，不支持并行或连续多工具编排。
+- 多工具按顺序编排执行，暂不支持并行工具调用。
 - Todo 仅支持创建和查询。
-- 未实现 SSE / WebSocket 流式输出。
+- 真实 Provider 的 SSE 当前是完整响应后的分段下发，尚未接入上游模型原生 token 流。
 - 未实现登录、多用户隔离、权限系统和生产级限流。

@@ -33,6 +33,8 @@ export default function App() {
   const [isCreating, setIsCreating] = useState(false);
   const [isDeletingSession, setIsDeletingSession] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [useStreaming, setUseStreaming] = useState(true);
+  const [streamingPhase, setStreamingPhase] = useState<"saving" | "tool" | "replying" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const detailRequestId = useRef(0);
   const messageEndRef = useRef<HTMLDivElement>(null);
@@ -233,46 +235,124 @@ export default function App() {
   async function sendMessage(content: string) {
     if (!activeSessionId || isSending) return;
     const sessionId = activeSessionId;
+    const provider = providerStatus?.provider ?? "mock";
     setIsSending(true);
     setError(null);
+    let optimisticUserId: string | null = null;
 
     try {
-      const result = await api.sendMessage(sessionId, {
-        content,
-        provider: providerStatus?.provider ?? "mock",
-      });
-      if (activeSessionId !== sessionId) return;
+      if (useStreaming) {
+        const stamp = Date.now();
+        const temporaryUserId = `stream-user-${stamp}`;
+        optimisticUserId = temporaryUserId;
+        const temporaryAssistantId = `stream-assistant-${stamp}`;
+        const createdAt = new Date().toISOString();
+        const optimisticUser: ChatMessage = {
+          id: temporaryUserId,
+          session_id: sessionId,
+          role: "user",
+          content,
+          created_at: createdAt,
+          delivery_status: "complete",
+        };
+        setInput("");
+        setStreamingPhase("saving");
+        setMessages((current) => [...current, optimisticUser]);
 
-      setInput("");
-      setMessages((current) => [
-        ...current,
-        result.user_message,
-        result.assistant_message,
-      ]);
-      setToolCalls((current) => [...current, ...result.tool_calls]);
-      setSessions((current) => current
-        .map((session) => session.id === sessionId
-          ? {
-              ...session,
-              title: session.title === "New conversation" ? content.slice(0, 40) : session.title,
-              updated_at: result.assistant_message.created_at,
-            }
-          : session)
-        .sort((left, right) => right.updated_at.localeCompare(left.updated_at)));
+        const upsertToolCall = (call: ToolCall) => {
+          setToolCalls((current) => {
+            const exists = current.some((item) => item.id === call.id);
+            return exists
+              ? current.map((item) => item.id === call.id ? call : item)
+              : [...current, call];
+          });
+        };
+
+        await api.sendMessageStream(sessionId, { content, provider }, (streamEvent) => {
+          if (streamEvent.event === "user_message_saved") {
+            setMessages((current) => current.map((message) =>
+              message.id === temporaryUserId ? streamEvent.data.user_message : message));
+          } else if (streamEvent.event === "tool_call_start") {
+            setStreamingPhase("tool");
+            upsertToolCall(streamEvent.data.tool_call);
+          } else if (streamEvent.event === "tool_call_result") {
+            upsertToolCall(streamEvent.data.tool_call);
+          } else if (streamEvent.event === "assistant_delta") {
+            setStreamingPhase("replying");
+            setMessages((current) => {
+              const existing = current.find((message) => message.id === temporaryAssistantId);
+              if (existing) {
+                return current.map((message) => message.id === temporaryAssistantId
+                  ? { ...message, content: message.content + streamEvent.data.delta }
+                  : message);
+              }
+              return [...current, {
+                id: temporaryAssistantId,
+                session_id: sessionId,
+                role: "assistant",
+                content: streamEvent.data.delta,
+                created_at: new Date().toISOString(),
+                delivery_status: "streaming",
+              }];
+            });
+          } else if (streamEvent.event === "assistant_done") {
+            const result = streamEvent.data;
+            setMessages((current) => {
+              const withoutTemporaryUser = current.map((message) =>
+                message.id === temporaryUserId ? result.user_message : message);
+              return withoutTemporaryUser.some((message) => message.id === temporaryAssistantId)
+                ? withoutTemporaryUser.map((message) => message.id === temporaryAssistantId
+                  ? { ...result.assistant_message, delivery_status: "complete" }
+                  : message)
+                : [...withoutTemporaryUser, { ...result.assistant_message, delivery_status: "complete" }];
+            });
+            result.tool_calls.forEach(upsertToolCall);
+            setSessions((current) => current
+              .map((session) => session.id === sessionId
+                ? {
+                    ...session,
+                    title: session.title === "New conversation" ? content.slice(0, 40) : session.title,
+                    updated_at: result.assistant_message.created_at,
+                  }
+                : session)
+              .sort((left, right) => right.updated_at.localeCompare(left.updated_at)));
+          }
+        });
+      } else {
+        const result = await api.sendMessage(sessionId, { content, provider });
+        if (activeSessionId !== sessionId) return;
+        setInput("");
+        setMessages((current) => [...current, result.user_message, result.assistant_message]);
+        setToolCalls((current) => [...current, ...result.tool_calls]);
+        setSessions((current) => current
+          .map((session) => session.id === sessionId
+            ? {
+                ...session,
+                title: session.title === "New conversation" ? content.slice(0, 40) : session.title,
+                updated_at: result.assistant_message.created_at,
+              }
+            : session)
+          .sort((left, right) => right.updated_at.localeCompare(left.updated_at)));
+      }
 
       try {
-        const refreshedSessions = await api.listSessions();
-        setSessions(refreshedSessions);
+        setSessions(await api.listSessions());
       } catch {
         setError("消息已发送，但会话列表刷新失败；重新加载页面后可恢复同步。");
       }
     } catch (caught) {
+      setMessages((current) => current
+        .filter((message) => message.id !== optimisticUserId)
+        .map((message) =>
+          message.delivery_status === "streaming"
+          ? { ...message, delivery_status: "failed" }
+          : message));
       setError(getErrorMessage(caught, "消息发送失败，请稍后重试。"));
     } finally {
+      setStreamingPhase(null);
       setIsSending(false);
     }
   }
-
   return (
     <main className="min-h-screen bg-canvas p-0 text-ink md:p-5">
       <div className="mx-auto grid min-h-screen max-w-[1440px] overflow-hidden border border-line bg-panel shadow-shell md:min-h-[calc(100vh-2.5rem)] md:grid-cols-[312px_minmax(0,1fr)] md:rounded-[1.75rem]">
@@ -373,7 +453,7 @@ export default function App() {
                     <div className="grid size-9 shrink-0 place-items-center rounded-2xl border border-brand/20 bg-[#f3edff] text-xs font-semibold text-brandDeep">回</div>
                     <div className="flex items-center gap-1.5 rounded-3xl rounded-tl-md border border-line bg-panel px-5 py-4 shadow-sm">
                       {[0, 1, 2].map((item) => <span className="size-2 animate-pulse rounded-full bg-brand/50" key={item} style={{ animationDelay: `${item * 150}ms` }} />)}
-                      <span className="ml-2 text-xs text-muted">Agent 正在整理回复</span>
+                      <span className="ml-2 text-xs text-muted">{streamingPhase === "tool" ? "Agent 正在执行工具" : streamingPhase === "saving" ? "正在保存用户消息" : useStreaming ? "Agent 正在流式回复" : "Agent 正在整理回复"}</span>
                     </div>
                   </div>
                 )}
@@ -385,6 +465,8 @@ export default function App() {
           <ChatComposer
             disabled={!activeSessionId || isLoadingSession}
             isSending={isSending}
+            useStreaming={useStreaming}
+            onStreamingChange={setUseStreaming}
             onChange={(value) => {
               setInput(value);
               if (error === "请输入消息内容后再发送。") setError(null);

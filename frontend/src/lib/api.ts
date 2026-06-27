@@ -3,6 +3,8 @@ import type {
   ApiSuccessResponse,
   ChatRequest,
   ChatResponse,
+  ChatStreamEvent,
+  ChatStreamEventHandler,
   ChatSession,
   ChatbotRole,
   HealthStatus,
@@ -92,6 +94,92 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return payload.data;
 }
 
+async function streamRequest(
+  path: string,
+  payload: ChatRequest,
+  onEvent: ChatStreamEventHandler,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method: "POST",
+      headers: {
+        Accept: "text/event-stream",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (cause) {
+    throw createApiError(
+      "NETWORK_ERROR",
+      "无法连接后端流式接口，请确认服务已启动。",
+      cause instanceof Error ? cause.message : null,
+    );
+  }
+
+  if (!response.ok) {
+    let errorBody: unknown;
+    try {
+      errorBody = await response.json();
+    } catch {
+      errorBody = null;
+    }
+    if (isApiErrorResponse(errorBody)) throw new ApiError(errorBody);
+    throw createApiError("HTTP_ERROR", `流式请求失败（HTTP ${response.status}）。`, errorBody);
+  }
+  if (!response.body) {
+    throw createApiError("STREAM_UNAVAILABLE", "浏览器未提供可读取的流式响应。", null);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let terminated = false;
+
+  function dispatch(block: string) {
+    let eventName = "message";
+    const dataLines: string[] = [];
+    for (const line of block.split("\n")) {
+      if (line.startsWith("event:")) eventName = line.slice(6).trim();
+      if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+    }
+    if (dataLines.length === 0) return;
+
+    let data: unknown;
+    try {
+      data = JSON.parse(dataLines.join("\n"));
+    } catch {
+      throw createApiError("INVALID_STREAM_EVENT", "流式事件不是有效 JSON。", { event: eventName });
+    }
+    const streamEvent = { event: eventName, data } as ChatStreamEvent;
+    onEvent(streamEvent);
+    if (eventName === "assistant_done") terminated = true;
+    if (eventName === "error") {
+      terminated = true;
+      const payloadError = data as ApiErrorResponse;
+      if (isApiErrorResponse(payloadError)) throw new ApiError(payloadError);
+      throw createApiError("STREAM_FAILED", "流式回复失败，请稍后重试。", data);
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary >= 0) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      if (block.trim()) dispatch(block);
+      boundary = buffer.indexOf("\n\n");
+    }
+    if (done) break;
+  }
+  if (buffer.trim()) dispatch(buffer);
+  if (!terminated) {
+    throw createApiError("STREAM_INTERRUPTED", "流式回复失败，请稍后重试。", null);
+  }
+}
+
 function sessionPath(sessionId: string) {
   return `/sessions/${encodeURIComponent(sessionId)}`;
 }
@@ -136,4 +224,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  sendMessageStream: (sessionId: string, payload: ChatRequest, onEvent: ChatStreamEventHandler) =>
+    streamRequest(`${sessionPath(sessionId)}/messages/stream`, payload, onEvent),
 };

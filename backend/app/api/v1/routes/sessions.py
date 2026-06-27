@@ -1,13 +1,20 @@
+import asyncio
+import json
+import logging
+from collections.abc import AsyncIterator
+from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, status
+from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
 from app.agents.service import AgentService
 from app.api.deps import DatabaseSession
 from app.core.config import get_settings
-from app.core.errors import AppError
-from app.models import Message, SessionRecord, Todo, ToolCall
+from app.core.errors import AppError, error_payload
+from app.models import Message, MessageRole, SessionRecord, Todo, ToolCall
 from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
@@ -23,6 +30,18 @@ from app.schemas.roles import RoleRead
 from app.services.roles import get_role, validate_role_id
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+logger = logging.getLogger(__name__)
+
+
+def sse_event(event: str, data: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def split_content(content: str, chunk_size: int = 12) -> list[str]:
+    return [
+        content[index : index + chunk_size]
+        for index in range(0, len(content), chunk_size)
+    ]
 
 
 def get_session_or_404(db: DatabaseSession, session_id: UUID) -> SessionRecord:
@@ -165,3 +184,91 @@ def send_message(
 
     response = AgentService(settings).run(db, record, content, provider_name=payload.provider)
     return ApiResponse(data=response)
+
+
+@router.post("/{session_id}/messages/stream")
+def stream_message(
+    session_id: UUID,
+    payload: ChatRequest,
+    db: DatabaseSession,
+) -> StreamingResponse:
+    record = get_session_or_404(db, session_id)
+    settings = get_settings()
+    content = payload.content.strip()
+    if not content:
+        raise AppError(
+            code="EMPTY_MESSAGE",
+            message="消息内容不能为空。",
+            status_code=422,
+        )
+    if len(content) > settings.max_user_message_length:
+        raise AppError(
+            code="MESSAGE_TOO_LONG",
+            message=f"消息长度不能超过 {settings.max_user_message_length} 个字符。",
+            status_code=422,
+            details={"max_length": settings.max_user_message_length},
+        )
+
+    user_message = Message(
+        session_id=record.id,
+        role=MessageRole.USER,
+        content=content,
+    )
+    record.updated_at = datetime.now(timezone.utc)
+    if record.title == "New conversation":
+        record.title = content[:40]
+    db.add(user_message)
+    db.add(record)
+    db.commit()
+    db.refresh(user_message)
+    saved_user = MessageRead.model_validate(user_message).model_dump(mode="json")
+
+    async def event_stream() -> AsyncIterator[str]:
+        try:
+            yield sse_event("user_message_saved", {"user_message": saved_user})
+            await asyncio.sleep(0)
+            response = AgentService(settings).run(
+                db,
+                record,
+                content,
+                provider_name=payload.provider,
+                user_message=user_message,
+            )
+            payload_data = response.model_dump(mode="json")
+            for sequence, tool_call in enumerate(payload_data["tool_calls"], 1):
+                pending_call = {
+                    **tool_call,
+                    "assistant_message_id": None,
+                    "tool_message_id": None,
+                    "result": None,
+                    "status": "pending",
+                    "error_code": None,
+                    "error_message": None,
+                    "completed_at": None,
+                }
+                yield sse_event(
+                    "tool_call_start",
+                    {"sequence": sequence, "tool_call": pending_call},
+                )
+                await asyncio.sleep(0.05)
+                yield sse_event(
+                    "tool_call_result",
+                    {"sequence": sequence, "tool_call": tool_call},
+                )
+            for delta in split_content(payload_data["assistant_message"]["content"]):
+                yield sse_event("assistant_delta", {"delta": delta})
+                await asyncio.sleep(0.04 if payload.provider in (None, "mock") else 0)
+            yield sse_event("assistant_done", payload_data)
+        except AppError as exc:
+            db.rollback()
+            yield sse_event("error", error_payload(exc.code, exc.message, exc.details))
+        except Exception as exc:
+            db.rollback()
+            logger.exception("Streaming message failed", exc_info=exc)
+            yield sse_event("error", error_payload("STREAM_FAILED", "流式回复失败，请稍后重试。"))
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

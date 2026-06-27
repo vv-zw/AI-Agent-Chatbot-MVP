@@ -111,19 +111,21 @@ class AgentService:
         session_record: SessionRecord,
         content: str,
         provider_name: str | None = None,
+        user_message: Message | None = None,
     ) -> ChatResponse:
         normalized_provider = normalize_provider_name(provider_name)
-        user_message = Message(
-            session_id=session_record.id,
-            role=MessageRole.USER,
-            content=content,
-        )
-        session_record.updated_at = datetime.now(timezone.utc)
-        if session_record.title == "New conversation":
-            session_record.title = content[:40]
-        db.add(user_message)
-        db.add(session_record)
-        db.flush()
+        if user_message is None:
+            user_message = Message(
+                session_id=session_record.id,
+                role=MessageRole.USER,
+                content=content,
+            )
+            session_record.updated_at = datetime.now(timezone.utc)
+            if session_record.title == "New conversation":
+                session_record.title = content[:40]
+            db.add(user_message)
+            db.add(session_record)
+            db.flush()
 
         tool_calls: list[ToolCall] = []
         if is_mode_status_question(content):

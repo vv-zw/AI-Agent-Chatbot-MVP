@@ -157,8 +157,10 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold opacity-70">
           <span>{label}</span>
           <time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time>
+          {message.delivery_status === "streaming" && <span className="text-brand">生成中</span>}
+          {message.delivery_status === "failed" && <span className="text-danger">已中断</span>}
         </div>
-        <p className="whitespace-pre-wrap break-words text-sm leading-7">{message.content}</p>
+        <p className="whitespace-pre-wrap break-words text-sm leading-7">{message.content}{message.delivery_status === "streaming" && <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-brand align-middle" />}</p>
       </div>
     </article>
   );

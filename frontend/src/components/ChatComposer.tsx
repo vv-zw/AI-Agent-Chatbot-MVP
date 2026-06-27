@@ -4,6 +4,8 @@ interface ChatComposerProps {
   value: string;
   disabled: boolean;
   isSending: boolean;
+  useStreaming: boolean;
+  onStreamingChange: (enabled: boolean) => void;
   maxLength: number;
   onChange: (value: string) => void;
   onEmptySubmit: () => void;
@@ -15,6 +17,8 @@ export function ChatComposer({
   value,
   disabled,
   isSending,
+  useStreaming,
+  onStreamingChange,
   maxLength,
   onChange,
   onEmptySubmit,
@@ -81,7 +85,15 @@ export function ChatComposer({
         </button>
       </form>
       <div className="mx-auto mt-2 flex max-w-4xl items-center justify-between gap-4 text-[11px] text-muted">
-        <p>Enter 发送，Shift + Enter 换行；结果用于辅助判断，请核对关键事实。</p>
+        <label className="flex cursor-pointer items-center gap-2" title="关闭后使用原有普通发送接口">
+          <input
+            checked={useStreaming}
+            disabled={isSending}
+            onChange={(event) => onStreamingChange(event.target.checked)}
+            type="checkbox"
+          />
+          <span>{useStreaming ? "流式输出已开启" : "普通发送 fallback"}</span>
+        </label>
         <p className={value.length > maxLength ? "font-semibold text-danger" : ""}>
           {value.length}/{maxLength}
         </p>

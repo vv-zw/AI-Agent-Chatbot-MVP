@@ -62,6 +62,7 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   created_at: string;
+  delivery_status?: "streaming" | "complete" | "failed";
 }
 
 export interface ToolCall {
@@ -89,6 +90,29 @@ export interface SessionCreateRequest {
   role_id?: string;
 }
 
+export type ChatStreamEvent =
+  | {
+      event: "user_message_saved";
+      data: { user_message: ChatMessage };
+    }
+  | {
+      event: "tool_call_start" | "tool_call_result";
+      data: { sequence: number; tool_call: ToolCall };
+    }
+  | {
+      event: "assistant_delta";
+      data: { delta: string };
+    }
+  | {
+      event: "assistant_done";
+      data: ChatResponse;
+    }
+  | {
+      event: "error";
+      data: ApiErrorResponse;
+    };
+
+export type ChatStreamEventHandler = (event: ChatStreamEvent) => void;
 export interface SessionRoleUpdateRequest {
   role_id: string;
 }
