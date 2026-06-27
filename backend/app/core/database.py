@@ -45,6 +45,15 @@ def _prepare_legacy_sqlite(database_engine: Engine) -> bool:
                 )
             )
 
+        if "sessions" in tables and "role_id" not in _column_names(
+            database_engine, "sessions"
+        ):
+            connection.execute(
+                text(
+                    "ALTER TABLE sessions ADD COLUMN role_id VARCHAR(40) "
+                    "NOT NULL DEFAULT 'general'"
+                )
+            )
         if "tool_calls" in tables:
             tool_columns = _column_names(database_engine, "tool_calls")
             if "assistant_message_id" in tool_columns and "message_id" not in tool_columns:

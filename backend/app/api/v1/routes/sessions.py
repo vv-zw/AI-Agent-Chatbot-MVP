@@ -15,9 +15,12 @@ from app.schemas.chat import (
     SessionCreate,
     SessionDetail,
     SessionRead,
+    SessionRoleUpdate,
     ToolCallRead,
 )
 from app.schemas.common import ApiResponse
+from app.schemas.roles import RoleRead
+from app.services.roles import get_role, validate_role_id
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -34,12 +37,23 @@ def get_session_or_404(db: DatabaseSession, session_id: UUID) -> SessionRecord:
     return session_record
 
 
+def role_read(role_id: str) -> RoleRead:
+    role = get_role(role_id)
+    return RoleRead(**role.__dict__)
+
+
+def session_read(record: SessionRecord) -> SessionRead:
+    payload = SessionRead.model_validate(record).model_dump()
+    payload["role"] = role_read(record.role_id)
+    return SessionRead(**payload)
+
+
 @router.get("", response_model=ApiResponse[list[SessionRead]])
-def list_sessions(db: DatabaseSession) -> ApiResponse[list[SessionRecord]]:
+def list_sessions(db: DatabaseSession) -> ApiResponse[list[SessionRead]]:
     records = db.exec(
         select(SessionRecord).order_by(SessionRecord.updated_at.desc())
     ).all()
-    return ApiResponse(data=list(records))
+    return ApiResponse(data=[session_read(record) for record in records])
 
 
 @router.post(
@@ -50,7 +64,7 @@ def list_sessions(db: DatabaseSession) -> ApiResponse[list[SessionRecord]]:
 def create_session(
     payload: SessionCreate,
     db: DatabaseSession,
-) -> ApiResponse[SessionRecord]:
+) -> ApiResponse[SessionRead]:
     title = payload.title.strip()
     if not title:
         raise AppError(
@@ -58,11 +72,12 @@ def create_session(
             message="会话标题不能为空。",
             status_code=422,
         )
-    record = SessionRecord(title=title)
+    role_id = validate_role_id(payload.role_id)
+    record = SessionRecord(title=title, role_id=role_id)
     db.add(record)
     db.commit()
     db.refresh(record)
-    return ApiResponse(data=record)
+    return ApiResponse(data=session_read(record))
 
 
 @router.get("/{session_id}", response_model=ApiResponse[SessionDetail])
@@ -83,12 +98,25 @@ def get_session(
     ).all()
     return ApiResponse(
         data=SessionDetail(
-            **SessionRead.model_validate(record).model_dump(),
+            **session_read(record).model_dump(),
             messages=[MessageRead.model_validate(item) for item in messages],
             tool_calls=[ToolCallRead.model_validate(item) for item in tool_calls],
         )
     )
 
+
+@router.patch("/{session_id}/role", response_model=ApiResponse[SessionRead])
+def update_session_role(
+    session_id: UUID,
+    payload: SessionRoleUpdate,
+    db: DatabaseSession,
+) -> ApiResponse[SessionRead]:
+    record = get_session_or_404(db, session_id)
+    record.role_id = validate_role_id(payload.role_id)
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return ApiResponse(data=session_read(record))
 
 
 @router.delete("/{session_id}", response_model=ApiResponse[dict[str, str]])
@@ -106,6 +134,7 @@ def delete_session(
     db.delete(record)
     db.commit()
     return ApiResponse(data={"id": str(session_id), "status": "deleted"})
+
 
 @router.post(
     "/{session_id}/messages",

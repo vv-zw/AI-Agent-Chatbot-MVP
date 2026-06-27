@@ -5,10 +5,16 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.entities import MessageRole, ToolCallStatus
+from app.schemas.roles import RoleRead
 
 
 class SessionCreate(BaseModel):
     title: str = Field(default="New conversation", max_length=120)
+    role_id: str | None = None
+
+
+class SessionRoleUpdate(BaseModel):
+    role_id: str
 
 
 class SessionRead(BaseModel):
@@ -16,8 +22,10 @@ class SessionRead(BaseModel):
 
     id: UUID
     title: str
+    role_id: str
     created_at: datetime
     updated_at: datetime
+    role: RoleRead | None = None
 
 
 class MessageRead(BaseModel):

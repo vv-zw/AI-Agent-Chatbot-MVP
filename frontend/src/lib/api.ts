@@ -4,6 +4,7 @@ import type {
   ChatRequest,
   ChatResponse,
   ChatSession,
+  ChatbotRole,
   HealthStatus,
   LLMProviderStatus,
   LLMProviderSwitchRequest,
@@ -11,6 +12,7 @@ import type {
   SessionCreateRequest,
   SessionDeleteResponse,
   SessionDetail,
+  SessionRoleUpdateRequest,
 } from "../types/api";
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
@@ -105,6 +107,8 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  listRoles: () => request<ChatbotRole[]>("/roles"),
+
   listSessions: () => request<ChatSession[]>("/sessions"),
 
   createSession: (payload: SessionCreateRequest = {}) =>
@@ -115,6 +119,12 @@ export const api = {
 
   getSession: (sessionId: string) =>
     request<SessionDetail>(sessionPath(sessionId)),
+
+  updateSessionRole: (sessionId: string, payload: SessionRoleUpdateRequest) =>
+    request<ChatSession>(`${sessionPath(sessionId)}/role`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
 
   deleteSession: (sessionId: string) =>
     request<SessionDeleteResponse>(sessionPath(sessionId), {

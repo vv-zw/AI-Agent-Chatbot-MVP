@@ -38,9 +38,20 @@ export interface LLMProviderSwitchResponse {
   openai_configured: boolean;
 }
 
+export interface ChatbotRole {
+  role_id: string;
+  name: string;
+  description: string;
+  system_prompt: string;
+  icon: string | null;
+  color: string | null;
+}
+
 export interface ChatSession {
   id: string;
   title: string;
+  role_id: string;
+  role: ChatbotRole | null;
   created_at: string;
   updated_at: string;
 }
@@ -75,6 +86,11 @@ export interface SessionDetail extends ChatSession {
 
 export interface SessionCreateRequest {
   title?: string;
+  role_id?: string;
+}
+
+export interface SessionRoleUpdateRequest {
+  role_id: string;
 }
 
 export interface SessionDeleteResponse {

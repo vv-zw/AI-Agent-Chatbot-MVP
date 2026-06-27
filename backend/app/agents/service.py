@@ -13,6 +13,7 @@ from app.llm.mock import MockLLMProvider
 from app.llm.openai import OpenAICompatibleProvider
 from app.models import Message, MessageRole, SessionRecord, ToolCall, ToolCallStatus
 from app.schemas.chat import ChatResponse, MessageRead, ToolCallRead
+from app.services.roles import get_role
 from app.tools.registry import (
     ToolArgumentError,
     ToolContext,
@@ -27,6 +28,7 @@ def build_context(
     db: Session,
     session_id: UUID,
     limit: int,
+    role_id: str | None = None,
 ) -> list[dict[str, str]]:
     recent = db.exec(
         select(Message)
@@ -34,9 +36,13 @@ def build_context(
         .order_by(Message.created_at.desc())
         .limit(limit)
     ).all()
+    role = get_role(role_id)
     return [
-        {"role": message.role.value, "content": message.content}
-        for message in reversed(recent)
+        {"role": "system", "content": role.system_prompt},
+        *[
+            {"role": message.role.value, "content": message.content}
+            for message in reversed(recent)
+        ],
     ]
 
 
@@ -128,6 +134,7 @@ class AgentService:
                 db,
                 session_record.id,
                 self.settings.max_context_messages,
+                session_record.role_id,
             )
             try:
                 llm_result = provider.complete(context)
@@ -167,6 +174,7 @@ class AgentService:
                     db,
                     session_record.id,
                     self.settings.max_context_messages,
+                    session_record.role_id,
                 )
                 try:
                     assistant_content = provider.complete_with_tool_result(

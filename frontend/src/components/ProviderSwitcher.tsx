@@ -9,8 +9,8 @@ interface ProviderSwitcherProps {
 }
 
 const PROVIDER_LABELS: Record<LLMProviderName, string> = {
-  mock: "Mock 演示",
-  openai: "真实接口",
+  mock: "Mock",
+  openai: "DeepSeek",
 };
 
 function currentLabel(status: LLMProviderStatus | null) {
@@ -31,7 +31,7 @@ export function ProviderSwitcher({
     <div className="flex flex-col items-stretch gap-2 sm:items-end">
       <div className="rounded-2xl border border-line bg-[#fffaf1] p-1.5 shadow-sm">
         <div className="mb-1 flex items-center justify-between gap-3 px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
-          <span>模型模式</span>
+          <span>LLM 模式</span>
           <span className="normal-case tracking-normal text-brandDeep">{currentLabel(status)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">

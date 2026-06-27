@@ -1,13 +1,16 @@
-import type { ChatSession } from "../types/api";
+import type { ChatbotRole, ChatSession } from "../types/api";
 
 interface SessionSidebarProps {
   sessions: ChatSession[];
+  roles: ChatbotRole[];
+  newSessionRoleId: string;
   activeSessionId: string | null;
   isLoading: boolean;
   isCreating: boolean;
   interactionDisabled: boolean;
   deletingSessionId: string | null;
   onCreateSession: () => void;
+  onNewSessionRoleChange: (roleId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
 }
@@ -33,12 +36,15 @@ export function LogoMark() {
 
 export function SessionSidebar({
   sessions,
+  roles,
+  newSessionRoleId,
   activeSessionId,
   isLoading,
   isCreating,
   interactionDisabled,
   deletingSessionId,
   onCreateSession,
+  onNewSessionRoleChange,
   onDeleteSession,
   onSelectSession,
 }: SessionSidebarProps) {
@@ -64,7 +70,25 @@ export function SessionSidebar({
         {isCreating ? "正在开启" : "开启新卷轴"}
       </button>
 
-      <div className="mt-7 flex min-h-0 flex-1 flex-col">
+      <label className="mt-3 rounded-2xl border border-line bg-panel/75 p-3 shadow-sm">
+        <span className="flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+          <span>新会话助手</span>
+          <span className="normal-case tracking-normal text-brandDeep">创建前选择</span>
+        </span>
+        <select
+          aria-label="新会话助手角色"
+          className="mt-2 w-full rounded-xl border border-line bg-white px-3 py-2 text-xs font-semibold text-ink outline-none focus:ring-4 focus:ring-brand/10 disabled:opacity-60"
+          disabled={isCreating || interactionDisabled || roles.length === 0}
+          onChange={(event) => onNewSessionRoleChange(event.target.value)}
+          value={newSessionRoleId}
+        >
+          {roles.map((role) => (
+            <option key={role.role_id} value={role.role_id}>{role.name}</option>
+          ))}
+        </select>
+      </label>
+
+      <div className="mt-6 flex min-h-0 flex-1 flex-col">
         <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
           会话档案
         </p>
@@ -80,9 +104,7 @@ export function SessionSidebar({
           {!isLoading && sessions.length === 0 && (
             <div className="rounded-2xl border border-dashed border-line bg-panel/75 px-4 py-8 text-center">
               <p className="text-sm font-medium text-ink">暂无卷轴</p>
-              <p className="mt-1 text-xs leading-5 text-muted">
-                开启新会话后会收纳在这里
-              </p>
+              <p className="mt-1 text-xs leading-5 text-muted">开启新会话后会收纳在这里</p>
             </div>
           )}
 
@@ -108,8 +130,11 @@ export function SessionSidebar({
                 >
                   <span className="block truncate text-sm font-semibold">{session.title}</span>
                   <span className={`mt-1 flex items-center gap-1.5 text-xs ${isActive ? "text-brandDeep" : "text-muted/75"}`}>
-                    <span className="size-1.5 rounded-full bg-current opacity-60" />
-                    更新于 {formatSessionTime(session.updated_at)}
+                    <span
+                      className="size-1.5 rounded-full bg-current opacity-60"
+                      style={{ color: session.role?.color ?? undefined }}
+                    />
+                    {session.role?.name ?? "通用助手"} · {formatSessionTime(session.updated_at)}
                   </span>
                 </button>
                 <button
@@ -137,9 +162,7 @@ export function SessionSidebar({
           <span className="size-2 rounded-full bg-success" />
           后端服务已连接
         </div>
-        <p className="mt-2 text-xs leading-5 text-muted">
-          会话、消息与工具施放记录会同步保存
-        </p>
+        <p className="mt-2 text-xs leading-5 text-muted">会话、消息与工具施放记录会同步保存</p>
       </div>
     </aside>
   );

@@ -11,9 +11,58 @@ PROJECT_NAME_PATTERN = re.compile(
 )
 
 
+def active_role(messages: list[dict[str, str]]) -> str:
+    system_text = "\n".join(
+        message.get("content", "")
+        for message in messages
+        if message.get("role") == "system"
+    )
+    if "代码助手" in system_text:
+        return "code"
+    if "写作助手" in system_text:
+        return "writing"
+    if "面试助手" in system_text:
+        return "interview"
+    return "general"
+
+
+def role_intro(role: str) -> str:
+    if role == "code":
+        return "我是当前项目的 Mock 代码助手，会优先从问题原因、修改思路、关键代码和验证方式来协助你。"
+    if role == "writing":
+        return "我是当前项目的 Mock 写作助手，会优先帮你梳理结构、优化措辞并润色表达。"
+    if role == "interview":
+        return "我是当前项目的 Mock 面试助手，会优先按背景、思路、取舍、结果来组织回答。"
+    return (
+        "我是当前项目的 Mock AI 助手，可以进行基础对话，"
+        "也可以调用时间、计算器和待办工具。你可以问我当前时间、"
+        "让我计算四则表达式，或让我记录和查看当前会话里的待办。"
+    )
+
+
+def role_default_reply(role: str, latest: str) -> str:
+    if role == "code":
+        return (
+            f"[Mock - 代码助手] 我收到：{latest}\n"
+            "技术视角：我会先定位现象和原因，再给出修改建议、示例代码和验证步骤。"
+        )
+    if role == "writing":
+        return (
+            f"[Mock - 写作助手] 我收到：{latest}\n"
+            "表达视角：我会先梳理核心观点，再优化结构、语气和措辞，让内容更顺。"
+        )
+    if role == "interview":
+        return (
+            f"[Mock - 面试助手] 我收到：{latest}\n"
+            "面试视角：建议按背景、行动、结果、复盘来回答，突出你的判断和取舍。"
+        )
+    return f"[Mock] 我收到了：{latest}"
+
+
 class MockLLMProvider:
     def complete(self, messages: list[dict[str, str]]) -> LLMResult:
         latest = messages[-1]["content"].strip() if messages else ""
+        role = active_role(messages)
 
         todo_match = TODO_CREATE_PATTERN.search(latest)
         if todo_match:
@@ -121,15 +170,9 @@ class MockLLMProvider:
                 "你能做什么",
             )
         ):
-            return LLMResult(
-                content=(
-                    "我是当前项目的 Mock AI 助手，可以进行基础对话，"
-                    "也可以调用时间、计算器和待办工具。你可以问我当前时间、"
-                    "让我计算四则表达式，或让我记录和查看当前会话里的待办。"
-                )
-            )
+            return LLMResult(content=role_intro(role))
 
-        return LLMResult(content=f"[Mock] 我收到了：{latest}")
+        return LLMResult(content=role_default_reply(role, latest))
 
     def complete_with_tool_result(
         self,

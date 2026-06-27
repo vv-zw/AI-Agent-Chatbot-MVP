@@ -3,9 +3,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatComposer } from "./components/ChatComposer";
 import { MessageTimeline } from "./components/MessageTimeline";
 import { ProviderSwitcher } from "./components/ProviderSwitcher";
+import { RoleSwitcher } from "./components/RoleSwitcher";
 import { LogoMark, SessionSidebar } from "./components/SessionSidebar";
 import { api } from "./lib/api";
-import type { ChatMessage, ChatSession, LLMProviderName, LLMProviderStatus, ToolCall } from "./types/api";
+import type { ChatbotRole, ChatMessage, ChatSession, LLMProviderName, LLMProviderStatus, ToolCall } from "./types/api";
 
 const MAX_USER_MESSAGE_LENGTH = 10_000;
 
@@ -15,6 +16,8 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 export default function App() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [roles, setRoles] = useState<ChatbotRole[]>([]);
+  const [newSessionRoleId, setNewSessionRoleId] = useState("general");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
@@ -24,7 +27,9 @@ export default function App() {
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isLoadingProvider, setIsLoadingProvider] = useState(true);
+  const [isLoadingRoles, setIsLoadingRoles] = useState(true);
   const [isSwitchingProvider, setIsSwitchingProvider] = useState(false);
+  const [isSwitchingRole, setIsSwitchingRole] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isDeletingSession, setIsDeletingSession] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -33,6 +38,7 @@ export default function App() {
   const messageEndRef = useRef<HTMLDivElement>(null);
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+  const selectedRoleId = activeSession?.role_id ?? newSessionRoleId;
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -49,6 +55,7 @@ export default function App() {
       if (requestId !== detailRequestId.current) return;
       setMessages(detail.messages);
       setToolCalls(detail.tool_calls);
+      setSessions((current) => current.map((item) => item.id === detail.id ? detail : item));
     } catch (caught) {
       if (requestId !== detailRequestId.current) return;
       setMessages([]);
@@ -57,6 +64,25 @@ export default function App() {
     } finally {
       if (requestId === detailRequestId.current) setIsLoadingSession(false);
     }
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    void (async () => {
+      try {
+        const items = await api.listRoles();
+        if (!isCancelled) setRoles(items);
+      } catch (caught) {
+        if (!isCancelled) setError(getErrorMessage(caught, "助手角色加载失败。"));
+      } finally {
+        if (!isCancelled) setIsLoadingRoles(false);
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -125,13 +151,39 @@ export default function App() {
     }
   }
 
+  async function switchRole(roleId: string) {
+    if (isSwitchingRole || roleId === selectedRoleId) return;
+    if (!activeSessionId) {
+      setNewSessionRoleId(roleId);
+      return;
+    }
+
+    const nextRole = roles.find((role) => role.role_id === roleId);
+    const confirmed = window.confirm(
+      `推荐新建会话使用“${nextRole?.name ?? roleId}”。确定要修改当前会话角色吗？后续消息会使用新的 system prompt，已有消息会保留。`,
+    );
+    if (!confirmed) return;
+
+    setIsSwitchingRole(true);
+    setError(null);
+    try {
+      const updated = await api.updateSessionRole(activeSessionId, { role_id: roleId });
+      setSessions((current) => current.map((session) => session.id === updated.id ? updated : session));
+      setNewSessionRoleId(roleId);
+    } catch (caught) {
+      setError(getErrorMessage(caught, "助手角色切换失败，请稍后重试。"));
+    } finally {
+      setIsSwitchingRole(false);
+    }
+  }
+
   async function createSession() {
     if (isCreating || isSending) return;
     setIsCreating(true);
     setError(null);
 
     try {
-      const created = await api.createSession();
+      const created = await api.createSession({ role_id: newSessionRoleId });
       detailRequestId.current += 1;
       setSessions((current) => [created, ...current.filter((item) => item.id !== created.id)]);
       setActiveSessionId(created.id);
@@ -230,9 +282,12 @@ export default function App() {
           isLoading={isLoadingSessions}
           interactionDisabled={isSending}
           deletingSessionId={isDeletingSession}
+          newSessionRoleId={newSessionRoleId}
           onCreateSession={() => void createSession()}
           onDeleteSession={(sessionId) => void deleteSession(sessionId)}
+          onNewSessionRoleChange={setNewSessionRoleId}
           onSelectSession={(sessionId) => void loadSession(sessionId)}
+          roles={roles}
           sessions={sessions}
         />
 
@@ -246,13 +301,23 @@ export default function App() {
                 {activeSession ? "消息、工具调用与执行结果已同步保存" : "开启会话后记录一次完整 Agent 任务"}
               </p>
             </div>
-            <ProviderSwitcher
-              isLoading={isLoadingProvider}
-              isSwitching={isSwitchingProvider}
-              message={providerMessage}
-              onSwitch={(provider) => void switchProvider(provider)}
-              status={providerStatus}
-            />
+            <div className="flex flex-wrap items-start gap-3">
+              <RoleSwitcher
+                disabled={isCreating || isSending || Boolean(isDeletingSession)}
+                isLoading={isLoadingRoles}
+                isSwitching={isSwitchingRole}
+                onChange={(roleId) => void switchRole(roleId)}
+                roles={roles}
+                selectedRoleId={selectedRoleId}
+              />
+              <ProviderSwitcher
+                isLoading={isLoadingProvider}
+                isSwitching={isSwitchingProvider}
+                message={providerMessage}
+                onSwitch={(provider) => void switchProvider(provider)}
+                status={providerStatus}
+              />
+            </div>
             <div className="flex items-center gap-2 md:hidden">
               {sessions.length > 0 && (
                 <select aria-label="选择会话" className="max-w-32 rounded-xl border border-line bg-white px-2 py-2 text-xs outline-none focus:ring-4 focus:ring-brand/10" disabled={isSending} onChange={(event) => void loadSession(event.target.value)} value={activeSessionId ?? ""}>
