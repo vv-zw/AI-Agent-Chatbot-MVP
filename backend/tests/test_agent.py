@@ -27,6 +27,10 @@ def test_context_builder_keeps_recent_roles() -> None:
         context = build_context(db, record.id, limit=3)
 
     assert context == [
+        {
+            "role": "system",
+            "content": "你是通用助手，适合日常问答和任务处理。回答要清晰、友好、直接，在需要时主动拆解步骤并给出可执行建议。",
+        },
         {"role": "assistant", "content": "第二条"},
         {"role": "tool", "content": '{"value":"3"}'},
         {"role": "assistant", "content": "第四条"},

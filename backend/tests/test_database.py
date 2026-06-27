@@ -4,7 +4,7 @@ from sqlalchemy import inspect, text
 from sqlmodel import Session, create_engine, select
 
 from app.core.database import create_db_and_tables
-from app.models import Message, Todo
+from app.models import Message, SessionRecord, Todo
 
 
 def test_legacy_sqlite_schema_is_migrated(tmp_path: Path) -> None:
@@ -24,6 +24,7 @@ def test_legacy_sqlite_schema_is_migrated(tmp_path: Path) -> None:
 
     inspector = inspect(engine)
     assert "metadata" in {column["name"] for column in inspector.get_columns("messages")}
+    assert "role_id" in {column["name"] for column in inspector.get_columns("sessions")}
     tool_columns = {column["name"] for column in inspector.get_columns("tool_calls")}
     assert "message_id" in tool_columns
     assert "assistant_message_id" not in tool_columns
@@ -31,8 +32,10 @@ def test_legacy_sqlite_schema_is_migrated(tmp_path: Path) -> None:
     assert {"title", "status", "updated_at"} <= todo_columns
 
     with Session(engine) as session:
+        session_record = session.exec(select(SessionRecord)).one()
         message = session.exec(select(Message)).one()
         todo = session.exec(select(Todo)).one()
+        assert session_record.role_id == "general"
         assert message.metadata_json == {}
         assert todo.title == "legacy todo"
         assert todo.status.value == "pending"
