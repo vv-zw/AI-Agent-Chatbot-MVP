@@ -89,60 +89,73 @@ def is_time_query(content: str) -> bool:
     )
 
 
+TODO_LIST_PHRASES = (
+    "我有哪些待办", "我的待办", "待办列表", "列出待办",
+)
+TODO_FOLLOWUP_PATTERN = re.compile(
+    r"[，,；;。]\s*(?:然后|再|并且|并)?\s*(?=(?:告诉|看看|查询|查|列|帮我|算|现在))"
+)
+
+
+def _first_phrase_position(content: str, phrases: tuple[str, ...]) -> int | None:
+    positions = [content.find(phrase) for phrase in phrases if phrase in content]
+    return min(positions) if positions else None
+
+
+def plan_tool_calls(content: str) -> tuple[ToolCallRequest, ...]:
+    """Build an ordered, independent tool plan from one Mock user request."""
+    candidates: list[tuple[int, int, ToolCallRequest]] = []
+    todo_match = TODO_CREATE_PATTERN.search(content)
+    if todo_match:
+        raw_title = todo_match.group(1).strip()
+        title = TODO_FOLLOWUP_PATTERN.split(raw_title, maxsplit=1)[0].rstrip("，,；;。 ")
+        candidates.append((todo_match.start(), 0, ToolCallRequest(
+            name="todo_tool", arguments={"action": "create", "title": title}
+        )))
+
+    todo_list_position = _first_phrase_position(content, TODO_LIST_PHRASES)
+    if todo_list_position is not None or content.strip() in (
+        "待办", "待办？", "待办事项", "待办事项？",
+    ):
+        candidates.append((todo_list_position or 0, 1, ToolCallRequest(
+            name="todo_tool", arguments={"action": "list"}
+        )))
+
+    time_position = _first_phrase_position(content, TIME_QUERY_PHRASES)
+    if time_position is not None or content.strip().replace(" ", "") in TIME_QUERY_EXACT:
+        candidates.append((time_position or 0, 2, ToolCallRequest(
+            name="get_current_time", arguments={}
+        )))
+
+    calculation = CALCULATION_PATTERN.search(content)
+    if calculation:
+        candidates.append((calculation.start(), 3, ToolCallRequest(
+            name="calculator", arguments={"expression": calculation.group(1).strip()}
+        )))
+
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    return tuple(item[2] for item in candidates)
+
+
 class MockLLMProvider:
     def complete(self, messages: list[dict[str, str]]) -> LLMResult:
         latest = messages[-1]["content"].strip() if messages else ""
         role = active_role(messages)
 
-        todo_match = TODO_CREATE_PATTERN.search(latest)
-        if todo_match:
-            return LLMResult(
-                tool_call=ToolCallRequest(
-                    name="todo_tool",
-                    arguments={"action": "create", "title": todo_match.group(1).strip()},
-                )
-            )
+        tool_calls = plan_tool_calls(latest)
+        if tool_calls:
+            return LLMResult(tool_calls=tool_calls)
 
-        if any(
-            keyword in latest
-            for keyword in ("我有哪些待办", "我的待办", "待办列表", "列出待办")
-        ) or latest in ("待办", "待办？", "待办事项", "待办事项？"):
-            return LLMResult(
-                tool_call=ToolCallRequest(
-                    name="todo_tool",
-                    arguments={"action": "list"},
-                )
-            )
-
-        if is_time_query(latest):
-            return LLMResult(
-                tool_call=ToolCallRequest(name="get_current_time", arguments={})
-            )
-
-        calculation = CALCULATION_PATTERN.search(latest)
-        if calculation:
-            return LLMResult(
-                tool_call=ToolCallRequest(
-                    name="calculator",
-                    arguments={"expression": calculation.group(1).strip()},
-                )
-            )
         if latest.startswith(("计算", "算一下", "帮我算")):
             expression = re.sub(r"^(计算|算一下|帮我算)\s*[：:]?\s*", "", latest)
             if not any(character.isdigit() for character in expression):
                 if any(keyword in expression for keyword in ("四则", "表达式", "算式")):
-                    return LLMResult(
-                        content=role_response(
-                            role,
-                            "请提供具体的四则表达式，例如：计算 (8 + 4) / 3。",
-                        )
-                    )
+                    return LLMResult(content=role_response(
+                        role, "请提供具体的四则表达式，例如：计算 (8 + 4) / 3。"
+                    ))
                 return LLMResult(content=role_default_reply(role, latest))
             return LLMResult(
-                tool_call=ToolCallRequest(
-                    name="calculator",
-                    arguments={"expression": expression},
-                )
+                tool_calls=(ToolCallRequest(name="calculator", arguments={"expression": expression}),)
             )
 
         if "项目叫什么" in latest or "项目名称" in latest:
@@ -222,39 +235,47 @@ class MockLLMProvider:
         tool_name: str,
         result: dict[str, Any],
     ) -> str:
-        role = active_role(messages)
-        if result.get("status") == "failed":
-            return role_response(
-                role,
-                (
-                    f"工具 {tool_name} 调用失败："
-                    f"{result.get('error_message') or '请检查参数后重试。'}"
-                ),
-            )
+        return self.complete_with_tool_results(messages, [result])
 
+    def complete_with_tool_results(
+        self,
+        messages: list[dict[str, str]],
+        results: list[dict[str, Any]],
+    ) -> str:
+        role = active_role(messages)
+        summaries = [self._summarize_tool_result(item) for item in results]
+        if len(summaries) == 1:
+            return role_response(role, summaries[0])
+        failed_count = sum(item.get("status") == "failed" for item in results)
+        succeeded_count = len(results) - failed_count
+        heading = (
+            f"已完成多工具编排：{succeeded_count} 项成功，{failed_count} 项失败。"
+            if failed_count
+            else f"已按顺序完成 {len(results)} 项工具调用："
+        )
+        details = "\n".join(f"{i}. {summary}" for i, summary in enumerate(summaries, 1))
+        return role_response(role, f"{heading}\n{details}")
+
+    @staticmethod
+    def _summarize_tool_result(result: dict[str, Any]) -> str:
+        tool_name = str(result.get("tool_name") or "<unknown>")
+        if result.get("status") == "failed":
+            reason = result.get("error_message") or "请检查参数后重试。"
+            return f"工具 {tool_name} 调用失败：{reason}"
         tool_result = result.get("result")
         if not isinstance(tool_result, dict):
-            return role_response(role, f"工具 {tool_name} 已执行完成。")
-
+            return f"工具 {tool_name} 已执行完成。"
         if tool_name == "get_current_time":
-            return role_response(
-                role,
-                (
-                    f"当前日期是 {tool_result['date']}，时间是 {tool_result['time']}，"
-                    f"{tool_result['weekday']}（{tool_result['timezone']}）。"
-                ),
-            )
+            return (f"当前日期是 {tool_result['date']}，时间是 {tool_result['time']}，"
+                    f"{tool_result['weekday']}（{tool_result['timezone']}）。")
         if tool_name == "calculator":
-            return role_response(
-                role,
-                f"计算结果：{tool_result['expression']} = {tool_result['value']}",
-            )
+            return f"计算结果：{tool_result['expression']} = {tool_result['value']}"
         if tool_name == "todo_tool" and tool_result.get("action") == "create":
-            return role_response(role, f"已记下待办：{tool_result['todo']['title']}")
+            return f"已记下待办：{tool_result['todo']['title']}"
         if tool_name == "todo_tool" and tool_result.get("action") == "list":
             todos = tool_result.get("todos", [])
             if not todos:
-                return role_response(role, "当前会话还没有待办事项。")
+                return "当前会话还没有待办事项。"
             lines = [f"{index}. {todo['title']}" for index, todo in enumerate(todos, 1)]
-            return role_response(role, "当前会话的待办：\n" + "\n".join(lines))
-        return role_response(role, f"工具 {tool_name} 已执行完成：{tool_result}")
+            return "当前会话的待办：\n" + "\n".join(lines)
+        return f"工具 {tool_name} 已执行完成：{tool_result}"

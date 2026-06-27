@@ -58,7 +58,7 @@ function RecordPreview({ title, value }: { title: string; value: unknown }) {
   );
 }
 
-function ToolCallCard({ call }: { call: ToolCall }) {
+function ToolCallCard({ call, sequence, total }: { call: ToolCall; sequence: number; total: number }) {
   const status = {
     pending: {
       label: "正在施放工具",
@@ -88,14 +88,13 @@ function ToolCallCard({ call }: { call: ToolCall }) {
           <div className="flex min-w-0 items-start gap-3">
             <span className={`mt-2 size-2.5 shrink-0 rounded-full ${status.dotClassName}`} />
             <div className="min-w-0">
-              <p className="text-xs font-medium text-muted">Agent 执行记录 · {status.label}</p>
+              <p className="text-xs font-medium text-muted">Agent 执行记录 · 第 {sequence}/{total} 步 · {status.label}</p>
               <p className="mt-0.5 truncate font-mono text-sm font-semibold text-ink">{call.tool_name}</p>
             </div>
           </div>
           <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${status.className}`}>{status.badge}</span>
         </div>
       </div>
-
       <div className="space-y-3 p-4">
         <RecordPreview title="调用参数" value={call.arguments} />
 
@@ -112,6 +111,23 @@ function ToolCallCard({ call }: { call: ToolCall }) {
         )}
       </div>
     </article>
+  );
+}
+
+function ToolCallGroup({ calls }: { calls: ToolCall[] }) {
+  if (calls.length === 0) return null;
+  return (
+    <section aria-label={`工具调用编排，共 ${calls.length} 步`} className="space-y-3">
+      {calls.length > 1 && (
+        <div className="ml-12 flex max-w-2xl items-center gap-3 rounded-2xl border border-brand/15 bg-[#f3edff]/80 px-4 py-2.5 text-xs text-brandDeep">
+          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand text-[11px] font-bold text-white">{calls.length}</span>
+          <span><strong>多工具编排</strong>：按顺序执行 {calls.length} 个独立步骤</span>
+        </div>
+      )}
+      {calls.map((call, index) => (
+        <ToolCallCard call={call} key={call.id} sequence={index + 1} total={calls.length} />
+      ))}
+    </section>
   );
 }
 
@@ -165,14 +181,14 @@ export function MessageTimeline({ messages, toolCalls }: MessageTimelineProps) {
         return (
           <div className="relative space-y-3 before:absolute before:left-[18px] before:top-12 before:h-[calc(100%-3rem)] before:w-px before:bg-gradient-to-b before:from-accent/70 before:to-line last:before:hidden" key={message.id}>
             <MessageBubble message={message} />
-            {relatedCalls.map((call) => <ToolCallCard call={call} key={call.id} />)}
+            <ToolCallGroup calls={relatedCalls} />
           </div>
         );
       })}
 
       {toolCalls
         .filter((call) => !renderedCallIds.has(call.id))
-        .map((call) => <ToolCallCard call={call} key={call.id} />)}
+        .map((call) => <ToolCallCard call={call} key={call.id} sequence={1} total={1} />)}
     </>
   );
 }

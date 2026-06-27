@@ -1,4 +1,4 @@
-﻿# AI Agent Chatbot MVP
+# AI Agent Chatbot MVP
 
 一个可本地运行的全栈 AI Chatbot MVP，包含 FastAPI 后端、React + Vite + TypeScript + Tailwind CSS 前端、SQLite 持久化、会话管理、消息管理、Mock LLM、工具调用和统一 API 契约。
 
@@ -292,10 +292,28 @@ POST /api/v1/llm/provider
 - `calculator`：安全四则运算，不使用 `eval`。
 - `todo_tool`：按会话创建和查询待办。
 
+
+## 多工具编排
+
+Mock 模式支持一次请求触发 0 个、1 个或多个工具。例如：
+
+```text
+现在几点？顺便帮我算一下 128 * 36 + 520
+帮我记一个待办：明天提交笔试项目，然后告诉我现在几点
+帮我记一个待办：提交 README，然后看看我有哪些待办
+```
+
+执行与错误处理策略：
+
+- 工具按用户请求中的任务顺序串行执行；因此“创建待办 + 查询待办”会先创建，后查询。
+- 每个工具使用独立参数，分别校验、执行并写入 `tool_calls`；每个结果都保存为一条 `role=tool` 消息。
+- 某一步参数非法、执行失败或工具未注册时，该步记录为 `failed`，后续工具继续执行。
+- 最终 assistant 回复会汇总所有成功和失败结果；前端按执行顺序展示带步骤序号的多张工具卡片。
+
+
 ## 真实 API 模式支持范围
 
 真实 API 模式使用 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL` 调用 OpenAI-compatible `/chat/completions` 接口。
-
 当前支持：
 
 - 普通聊天。

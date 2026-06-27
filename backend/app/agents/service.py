@@ -147,28 +147,31 @@ class AgentService:
                     status_code=502,
                 ) from exc
 
-            if llm_result.tool_call is not None:
-                tool_call = self._execute_tool(
-                    db=db,
-                    session_id=session_record.id,
-                    name=llm_result.tool_call.name,
-                    arguments=llm_result.tool_call.arguments,
-                )
-                tool_calls.append(tool_call)
-                tool_message = Message(
-                    session_id=session_record.id,
-                    role=MessageRole.TOOL,
-                    content=self._build_tool_message_content(tool_call),
-                    metadata_json={
-                        "tool_call_id": str(tool_call.id),
-                        "tool_name": tool_call.tool_name,
-                        "status": tool_call.status.value,
-                    },
-                )
-                db.add(tool_message)
-                db.flush()
-                tool_call.tool_message_id = tool_message.id
-                db.add(tool_call)
+            requested_tool_calls = llm_result.normalized_tool_calls()
+            if requested_tool_calls:
+                for sequence, requested_call in enumerate(requested_tool_calls, 1):
+                    tool_call = self._execute_tool(
+                        db=db,
+                        session_id=session_record.id,
+                        name=requested_call.name,
+                        arguments=requested_call.arguments,
+                    )
+                    tool_calls.append(tool_call)
+                    tool_message = Message(
+                        session_id=session_record.id,
+                        role=MessageRole.TOOL,
+                        content=self._build_tool_message_content(tool_call),
+                        metadata_json={
+                            "tool_call_id": str(tool_call.id),
+                            "tool_name": tool_call.tool_name,
+                            "status": tool_call.status.value,
+                            "sequence": sequence,
+                        },
+                    )
+                    db.add(tool_message)
+                    db.flush()
+                    tool_call.tool_message_id = tool_message.id
+                    db.add(tool_call)
 
                 context = build_context(
                     db,
@@ -177,11 +180,23 @@ class AgentService:
                     session_record.role_id,
                 )
                 try:
-                    assistant_content = provider.complete_with_tool_result(
-                        context,
-                        tool_call.tool_name,
-                        self._tool_result_payload(tool_call),
+                    result_payloads = [
+                        self._tool_result_payload(item) for item in tool_calls
+                    ]
+                    complete_many = getattr(
+                        provider,
+                        "complete_with_tool_results",
+                        None,
                     )
+                    if callable(complete_many):
+                        assistant_content = complete_many(context, result_payloads)
+                    else:
+                        last_call = tool_calls[-1]
+                        assistant_content = provider.complete_with_tool_result(
+                            context,
+                            last_call.tool_name,
+                            result_payloads[-1],
+                        )
                 except Exception as exc:
                     raise AppError(
                         code="LLM_CALL_FAILED",
@@ -220,6 +235,7 @@ class AgentService:
             assistant_message=MessageRead.model_validate(assistant_message),
             tool_calls=[ToolCallRead.model_validate(item) for item in tool_calls],
         )
+
     def _execute_tool(
         self,
         db: Session,
