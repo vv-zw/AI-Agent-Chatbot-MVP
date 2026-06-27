@@ -11,6 +11,7 @@ import type {
   LLMProviderStatus,
   LLMProviderSwitchRequest,
   LLMProviderSwitchResponse,
+  KnowledgeFile,
   SessionCreateRequest,
   SessionDeleteResponse,
   SessionDetail,
@@ -94,6 +95,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return payload.data;
 }
 
+async function uploadRequest<T>(path: string, file: File): Promise<T> {
+  const body = new FormData();
+  body.append("file", file);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, { method: "POST", body });
+  } catch (cause) {
+    throw createApiError("NETWORK_ERROR", "无法连接文件上传接口，请确认后端服务已启动。", cause);
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw createApiError("INVALID_RESPONSE", `上传失败（HTTP ${response.status}）。`);
+  }
+  if (!response.ok) {
+    if (isApiErrorResponse(payload)) throw new ApiError(payload);
+    throw createApiError("HTTP_ERROR", `上传失败（HTTP ${response.status}）。`, payload);
+  }
+  if (!isApiSuccessResponse<T>(payload)) {
+    throw createApiError("INVALID_RESPONSE", "上传响应缺少 data 字段。", payload);
+  }
+  return payload.data;
+}
 async function streamRequest(
   path: string,
   payload: ChatRequest,
@@ -219,6 +244,11 @@ export const api = {
       method: "DELETE",
     }),
 
+  listKnowledgeFiles: (sessionId: string) =>
+    request<KnowledgeFile[]>(`${sessionPath(sessionId)}/knowledge/files`),
+
+  uploadKnowledgeFile: (sessionId: string, file: File) =>
+    uploadRequest<KnowledgeFile>(`${sessionPath(sessionId)}/knowledge/files`, file),
   sendMessage: (sessionId: string, payload: ChatRequest) =>
     request<ChatResponse>(`${sessionPath(sessionId)}/messages`, {
       method: "POST",

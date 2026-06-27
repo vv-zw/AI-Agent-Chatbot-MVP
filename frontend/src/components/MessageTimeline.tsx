@@ -5,6 +5,50 @@ interface MessageTimelineProps {
   toolCalls: ToolCall[];
 }
 
+interface KnowledgeMatch {
+  filename: string;
+  chunk_text: string;
+  score?: number;
+  match_reason?: string;
+}
+
+function knowledgeMatches(call: ToolCall): KnowledgeMatch[] {
+  const items = call.result?.matched_chunks;
+  if (!Array.isArray(items)) return [];
+  return items.filter((item): item is KnowledgeMatch => (
+    typeof item === "object" && item !== null
+    && typeof (item as KnowledgeMatch).filename === "string"
+    && typeof (item as KnowledgeMatch).chunk_text === "string"
+  ));
+}
+
+function KnowledgeSearchPreview({ call }: { call: ToolCall }) {
+  const matches = knowledgeMatches(call);
+  const query = typeof call.arguments.query === "string" ? call.arguments.query : "未提供查询内容";
+  const message = typeof call.result?.message === "string" ? call.result.message : null;
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-brand/15 bg-[#f7f1ff] px-4 py-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-brandDeep/70">检索问题</p>
+        <p className="mt-1 text-sm leading-6 text-ink">{query}</p>
+      </div>
+      {matches.map((match, index) => (
+        <blockquote className="relative overflow-hidden rounded-2xl border border-line bg-[#fffbf3] px-4 py-3" key={`${match.filename}-${index}`}>
+          <div className="absolute inset-y-0 left-0 w-1 bg-accent/70" />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-ink">{match.filename}</p>
+            <span className="rounded-full bg-panel px-2 py-1 text-[10px] text-muted">引用 {index + 1}{typeof match.score === "number" ? ` · ${Math.round(match.score * 100)}%` : ""}</span>
+          </div>
+          <p className="mt-2 line-clamp-5 whitespace-pre-wrap text-xs leading-6 text-muted">“{match.chunk_text}”</p>
+          {match.match_reason && <p className="mt-2 text-[10px] text-brandDeep/70">{match.match_reason}</p>}
+        </blockquote>
+      ))}
+      {matches.length === 0 && message && (
+        <p className="rounded-2xl border border-warning/20 bg-[#fff8e6] px-4 py-3 text-xs leading-5 text-warning">{message}</p>
+      )}
+    </div>
+  );
+}
 function formatMessageTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -96,12 +140,14 @@ function ToolCallCard({ call, sequence, total }: { call: ToolCall; sequence: num
         </div>
       </div>
       <div className="space-y-3 p-4">
-        <RecordPreview title="调用参数" value={call.arguments} />
-
-        {call.result !== null && (
-          <RecordPreview title="工具返回结果" value={call.result} />
+        {call.tool_name === "knowledge_search" ? (
+          <KnowledgeSearchPreview call={call} />
+        ) : (
+          <>
+            <RecordPreview title="调用参数" value={call.arguments} />
+            {call.result !== null && <RecordPreview title="工具返回结果" value={call.result} />}
+          </>
         )}
-
         {call.error_message && (
           <div className="rounded-2xl border border-danger/20 bg-[#fff1f1] p-3 text-danger">
             <p className="text-xs font-semibold">错误信息</p>

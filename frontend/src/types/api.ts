@@ -80,6 +80,15 @@ export interface ToolCall {
   completed_at: string | null;
 }
 
+export interface KnowledgeFile {
+  id: string;
+  session_id: string;
+  filename: string;
+  content_type: string;
+  size: number;
+  chunk_count: number;
+  created_at: string;
+}
 export interface SessionDetail extends ChatSession {
   messages: ChatMessage[];
   tool_calls: ToolCall[];

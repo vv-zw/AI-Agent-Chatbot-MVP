@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ChatComposer } from "./components/ChatComposer";
 import { MessageTimeline } from "./components/MessageTimeline";
+import { KnowledgeShelf } from "./components/KnowledgeShelf";
 import { ProviderSwitcher } from "./components/ProviderSwitcher";
 import { RoleSwitcher } from "./components/RoleSwitcher";
 import { LogoMark, SessionSidebar } from "./components/SessionSidebar";
 import { api } from "./lib/api";
-import type { ChatbotRole, ChatMessage, ChatSession, LLMProviderName, LLMProviderStatus, ToolCall } from "./types/api";
+import type { ChatbotRole, ChatMessage, ChatSession, LLMProviderName, LLMProviderStatus, KnowledgeFile, ToolCall } from "./types/api";
 
 const MAX_USER_MESSAGE_LENGTH = 10_000;
 
@@ -21,6 +22,10 @@ export default function App() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
+  const [knowledgeFiles, setKnowledgeFiles] = useState<KnowledgeFile[]>([]);
+  const [isLoadingKnowledge, setIsLoadingKnowledge] = useState(false);
+  const [isUploadingKnowledge, setIsUploadingKnowledge] = useState(false);
+  const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
   const [providerStatus, setProviderStatus] = useState<LLMProviderStatus | null>(null);
   const [providerMessage, setProviderMessage] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -50,21 +55,28 @@ export default function App() {
     const requestId = ++detailRequestId.current;
     setActiveSessionId(sessionId);
     setIsLoadingSession(true);
+    setIsLoadingKnowledge(true);
     setError(null);
+    setKnowledgeError(null);
 
     try {
-      const detail = await api.getSession(sessionId);
+      const [detail, files] = await Promise.all([api.getSession(sessionId), api.listKnowledgeFiles(sessionId)]);
       if (requestId !== detailRequestId.current) return;
       setMessages(detail.messages);
       setToolCalls(detail.tool_calls);
+      setKnowledgeFiles(files);
       setSessions((current) => current.map((item) => item.id === detail.id ? detail : item));
     } catch (caught) {
       if (requestId !== detailRequestId.current) return;
       setMessages([]);
       setToolCalls([]);
+      setKnowledgeFiles([]);
       setError(getErrorMessage(caught, "加载会话失败，请稍后重试。"));
     } finally {
-      if (requestId === detailRequestId.current) setIsLoadingSession(false);
+      if (requestId === detailRequestId.current) {
+        setIsLoadingSession(false);
+        setIsLoadingKnowledge(false);
+      }
     }
   }, []);
 
@@ -191,6 +203,8 @@ export default function App() {
       setActiveSessionId(created.id);
       setMessages([]);
       setToolCalls([]);
+      setKnowledgeFiles([]);
+      setKnowledgeError(null);
       setInput("");
     } catch (caught) {
       setError(getErrorMessage(caught, "新建会话失败，请稍后重试。"));
@@ -222,6 +236,8 @@ export default function App() {
           setActiveSessionId(null);
           setMessages([]);
           setToolCalls([]);
+          setKnowledgeFiles([]);
+          setKnowledgeError(null);
           setInput("");
         }
       }
@@ -232,6 +248,21 @@ export default function App() {
     }
   }
 
+  async function uploadKnowledge(file: File) {
+    if (!activeSessionId || isUploadingKnowledge) return;
+    const sessionId = activeSessionId;
+    setIsUploadingKnowledge(true);
+    setKnowledgeError(null);
+    try {
+      const uploaded = await api.uploadKnowledgeFile(sessionId, file);
+      if (activeSessionId !== sessionId) return;
+      setKnowledgeFiles((current) => [uploaded, ...current]);
+    } catch (caught) {
+      setKnowledgeError(getErrorMessage(caught, "文件上传失败，请检查格式和大小后重试。"));
+    } finally {
+      setIsUploadingKnowledge(false);
+    }
+  }
   async function sendMessage(content: string) {
     if (!activeSessionId || isSending) return;
     const sessionId = activeSessionId;
@@ -408,6 +439,14 @@ export default function App() {
             </div>
           </header>
 
+          <KnowledgeShelf
+            disabled={!activeSessionId || isLoadingSession || isSending}
+            error={knowledgeError}
+            files={knowledgeFiles}
+            isLoading={isLoadingKnowledge}
+            isUploading={isUploadingKnowledge}
+            onUpload={(file) => void uploadKnowledge(file)}
+          />
           {error && (
             <div className="mx-4 mt-4 flex items-start justify-between gap-3 rounded-2xl border border-danger/20 bg-[#fff1f1] px-4 py-3 text-sm text-danger sm:mx-7" role="alert">
               <span>{error}</span>
