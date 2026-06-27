@@ -85,7 +85,7 @@ def test_mock_lists_available_tools(client: TestClient, session_id: str) -> None
 
     assert response.status_code == 201
     data = response.json()["data"]
-    assert "Mock 模式目前可以演示基础聊天和 3 个本地工具" in data["assistant_message"]["content"]
+    assert "Mock 模式目前可以演示基础聊天和 4 个本地工具" in data["assistant_message"]["content"]
     assert "get_current_time" in data["assistant_message"]["content"]
     assert "calculator" in data["assistant_message"]["content"]
     assert "todo_tool" in data["assistant_message"]["content"]

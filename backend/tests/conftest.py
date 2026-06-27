@@ -19,7 +19,9 @@ from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.core.llm_provider_state import runtime_llm_provider_state
 from app.main import app
-from app.models import Message, SessionRecord, Todo, ToolCall
+from app.models import (
+    KnowledgeChunk, KnowledgeFile, Message, SessionRecord, Todo, ToolCall,
+)
 
 
 TEST_ENGINE = create_engine(
@@ -43,6 +45,8 @@ def clean_database() -> Generator[None, None, None]:
     get_settings.cache_clear()
     runtime_llm_provider_state.reset("mock")
     with Session(TEST_ENGINE) as session:
+        session.exec(delete(KnowledgeChunk))
+        session.exec(delete(KnowledgeFile))
         session.exec(delete(ToolCall))
         session.exec(delete(Todo))
         session.exec(delete(Message))
@@ -52,6 +56,8 @@ def clean_database() -> Generator[None, None, None]:
     get_settings.cache_clear()
     runtime_llm_provider_state.reset("mock")
     with Session(TEST_ENGINE) as session:
+        session.exec(delete(KnowledgeChunk))
+        session.exec(delete(KnowledgeFile))
         session.exec(delete(ToolCall))
         session.exec(delete(Todo))
         session.exec(delete(Message))

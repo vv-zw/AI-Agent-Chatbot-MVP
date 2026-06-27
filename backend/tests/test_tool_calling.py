@@ -57,7 +57,7 @@ def send_message(client: TestClient, session_id: str, content: str = "测试工�
 def test_registry_exposes_whitelisted_tool_schemas() -> None:
     definitions = {item.name: item for item in tool_registry.definitions()}
 
-    assert set(definitions) == {"get_current_time", "calculator", "todo_tool"}
+    assert set(definitions) == {"get_current_time", "calculator", "todo_tool", "knowledge_search"}
     for definition in definitions.values():
         assert definition.description
         assert definition.parameters_schema["type"] == "object"

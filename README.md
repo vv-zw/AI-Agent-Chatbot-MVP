@@ -2,13 +2,13 @@
 
 一个可本地运行的全栈 AI Chatbot MVP，包含 FastAPI 后端、React + Vite + TypeScript + Tailwind CSS 前端、SQLite 持久化、会话管理、消息管理、Mock LLM、工具调用和统一 API 契约。
 
-项目默认使用 Mock 模式，无需任何真实 API Key，也能完整演示聊天、会话、上下文、时间工具、计算工具、待办工具和前端工具调用展示。现在也支持在页面上切换到 DeepSeek / OpenAI-compatible 真实 API 模式，并可为每个会话选择不同的 Chatbot 助手角色。
+项目默认使用 Mock 模式，无需任何真实 API Key，也能完整演示聊天、会话、上下文、时间工具、计算工具、待办工具、轻量知识库问答和前端工具调用展示。现在也支持在页面上切换到 DeepSeek / OpenAI-compatible 真实 API 模式，并可为每个会话选择不同的 Chatbot 助手角色。
 
 ## 功能概览
 
 - FastAPI 后端，统一 `/api/v1` API 前缀。
 - React + Vite + TypeScript 前端。
-- SQLite 本地持久化会话、消息、工具调用和待办。
+- SQLite 本地持久化会话、消息、工具调用、待办和会话级知识库。
 - Mock LLM 默认启用，稳定支持工具调用演示。
 - 支持基于 SSE 的分段回复、工具阶段事件和前端增量展示，并保留普通发送 fallback。
 - 运行时 LLM Provider 切换：`mock` / `openai`。
@@ -251,6 +251,8 @@ POST /api/v1/llm/provider
 | `POST` | `/api/v1/sessions` | 创建会话 |
 | `GET` | `/api/v1/sessions/{session_id}` | 获取会话详情 |
 | `PATCH` | `/api/v1/sessions/{session_id}/role` | 修改当前会话角色 |
+| `GET` | `/api/v1/sessions/{session_id}/knowledge/files` | 获取当前会话的知识库文件列表 |
+| `POST` | `/api/v1/sessions/{session_id}/knowledge/files` | 上传文本文件（multipart/form-data） |
 | `POST` | `/api/v1/sessions/{session_id}/messages` | 普通发送消息（保留为 fallback） |
 | `POST` | `/api/v1/sessions/{session_id}/messages/stream` | 发送消息并返回 SSE 事件流 |
 
@@ -272,6 +274,25 @@ POST /api/v1/llm/provider
 }
 ```
 
+## 轻量知识库问答
+
+知识库与会话绑定，支持上传 UTF-8 编码的 `.txt`、`.md`、`.csv` 和 `.json` 文本文件。单文件默认上限为 1 MB，可通过后端 `MAX_KNOWLEDGE_FILE_SIZE` 调整。上传内容只作为文本读取和分段，不执行文件中的脚本或代码。
+
+使用方式：
+
+1. 新建或选择一条会话。
+2. 在聊天页顶部的“资料夹”点击“上传资料”，选择支持的文本文件。
+3. 上传完成后直接提问，例如“根据我上传的文件，总结一下主要内容”或“这个文档里提到了哪些技术栈？”。
+4. Mock Router 自动调用 `knowledge_search`；工具卡片展示查询、来源文件、匹配原因、分数和引用片段，最终回复也会标注 `[文件名]`。
+
+存储与检索：
+
+- `knowledge_files` 保存 `session_id`、文件名、类型、大小和上传时间。
+- `knowledge_chunks` 保存按约 800 字、少量重叠切分的正文片段，并冗余 `session_id` 保障会话过滤。
+- `knowledge_search` 仅查询当前 session，综合中英文关键词交集、完整子串和模糊相似度排序，默认返回 3 条、最多 5 条。
+- 没有文件或没有匹配时仍保存一次成功的工具调用，并返回可直接展示的友好空结果。
+
+这是轻量 MVP：没有向量数据库、Embedding、语义重排或 OCR。后续可保持工具和 API 返回结构不变，将内部检索升级为向量检索。
 ## 流式输出
 
 前端默认开启“流式输出”，发送后会立即显示用户消息，并逐段追加 Agent 回复。发送期间按钮、会话切换和角色切换会禁用；工具调用时展示“处理中 / 成功 / 失败”阶段，流结束后 assistant 消息变为完成状态。取消输入框下方的“流式输出已开启”复选框，即可改用原有普通接口作为 fallback。
@@ -398,6 +419,7 @@ Windows 环境下如系统临时目录权限受限，可显式执行 `python -m 
 - 工具调用记录落库到 `tool_calls`，工具结果保存为 `role=tool` 消息。
 - 消息发送响应包含前端展示工具调用所需的 `tool_calls` 信息。
 - todo、消息和工具调用不跨 session 泄露。
+- 知识库文本上传、类型校验、检索、空库提示、引用落库和跨 session 隔离。
 - 旧 SQLite schema 迁移兼容性。
 - 角色列表、默认/指定/非法角色、会话角色持久化和 Mock 角色差异。
 - SSE 流式普通回复、工具阶段事件、统一错误事件，以及普通发送接口回归。
@@ -425,18 +447,22 @@ npm run typecheck
 4. 时间工具可用。
 5. 计算工具可用。
 6. 待办工具可用。
-7. 前端显示当前模式为 Mock。
-8. 点击真实 API，未配置 Key 时显示友好错误。
-9. 配置 DeepSeek Key 后重启后端，切换真实 API。
-10. 普通聊天走真实模型。
-11. 切回 Mock 后，工具调用仍可用。
-12. 新建会话前选择不同助手角色，确认会话列表和页头显示正确。
-13. 在 Mock 模式下用同一问题验证不同角色的回复侧重点。
+7. 上传 `.txt` / `.md` / `.csv` / `.json`，基于文件提问并检查引用卡片。
+8. 新建另一会话，确认看不到前一会话的文件与内容。
+9. 前端显示当前模式为 Mock。
+10. 点击真实 API，未配置 Key 时显示友好错误。
+11. 配置 DeepSeek Key 后重启后端，切换真实 API。
+12. 普通聊天走真实模型。
+13. 切回 Mock 后，工具调用仍可用。
+14. 新建会话前选择不同助手角色，确认会话列表和页头显示正确。
+15. 在 Mock 模式下用同一问题验证不同角色的回复侧重点。
 
 ## 已知限制
 
 - 真实 API 模式当前只保证普通聊天。
 - Mock LLM 基于规则和关键词，不等同真实模型推理能力。
+- 知识库仅支持 UTF-8 文本和 1 MB 单文件；暂不支持 PDF、Word、图片 OCR。
+- 关键词/模糊匹配不具备向量语义检索的召回能力；跨片段综合总结较弱。
 - 多工具按顺序编排执行，暂不支持并行工具调用。
 - Todo 仅支持创建和查询。
 - 真实 Provider 流式输出当前仅处理最终回答 `delta.content`；`reasoning_content`、真实模型 tool calling 暂未展示。
