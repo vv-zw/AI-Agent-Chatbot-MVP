@@ -2,7 +2,7 @@
 
 一个可本地运行的全栈 AI Chatbot MVP，包含 FastAPI 后端、React + Vite + TypeScript + Tailwind CSS 前端、SQLite 持久化、会话管理、消息管理、Mock LLM、工具调用和统一 API 契约。
 
-项目默认使用 Mock 模式，无需任何真实 API Key，也能完整演示聊天、会话、上下文、时间工具、计算工具、待办工具和前端工具调用展示。现在也支持在页面上切换到 DeepSeek / OpenAI-compatible 真实 API 模式，用于普通聊天验证。
+项目默认使用 Mock 模式，无需任何真实 API Key，也能完整演示聊天、会话、上下文、时间工具、计算工具、待办工具和前端工具调用展示。现在也支持在页面上切换到 DeepSeek / OpenAI-compatible 真实 API 模式，并可为每个会话选择不同的 Chatbot 助手角色。
 
 ## 功能概览
 
@@ -12,6 +12,8 @@
 - Mock LLM 默认启用，稳定支持工具调用演示。
 - 运行时 LLM Provider 切换：`mock` / `openai`。
 - OpenAI-compatible Provider 支持 DeepSeek 普通聊天。
+- 会话级助手角色切换，预置通用、代码、写作、面试 4 个角色。
+- 角色 system prompt 同时作用于 Mock 和真实 Provider 上下文。
 - 统一响应格式：成功 `{ "data": ... }`，失败 `{ "error": { "code", "message", "details" } }`。
 
 ## 目录结构
@@ -26,6 +28,7 @@ AI Agent Chatbot MVP/
 │  │  ├─ llm/                 # Mock 与 OpenAI-compatible Provider
 │  │  ├─ models/              # SQLModel 数据模型
 │  │  ├─ schemas/             # Pydantic API 契约
+│  │  ├─ services/            # 助手角色定义等业务服务
 │  │  └─ tools/               # 工具白名单与执行器
 │  ├─ tests/
 │  ├─ .env.example
@@ -154,6 +157,42 @@ OPENAI_MODEL=deepseek-chat
 - 真实 API 模式当前支持普通聊天。
 - 工具调用推荐切回 Mock 模式完整演示。
 
+## 助手角色切换
+
+项目预置 4 个会话级角色：
+
+| role_id | 角色 | 侧重点 |
+|---|---|---|
+| `general` | 通用助手 | 日常问答和任务处理 |
+| `code` | 代码助手 | 代码解释、调试和工程建议 |
+| `writing` | 写作助手 | 表达优化、结构整理和润色 |
+| `interview` | 面试助手 | 面试题讲解、项目复盘和回答组织 |
+
+每个角色都包含独立的 `system_prompt`。发送消息时，后端会读取当前会话的 `role_id`，将对应 system prompt 放在上下文首条：Mock 模式据此展示可识别的角色化回复，真实 Provider 则将该 system 消息随普通聊天上下文一并发送。
+
+页面侧栏的“新会话助手”用于选择下一条新会话的角色；页头的“助手角色”展示当前会话角色。修改已有会话时，页面会提示推荐新建会话；确认继续后，会通过 `PATCH /api/v1/sessions/{session_id}/role` 保存，已有消息不会删除。
+
+助手角色与 Provider 是两个独立维度：
+
+- **LLM 模式**决定回复由 Mock 规则还是 DeepSeek / OpenAI-compatible 模型生成。
+- **助手角色**决定当前会话采用哪一套 system prompt 和回答侧重点。
+
+角色 API：
+
+```http
+GET /api/v1/roles
+PATCH /api/v1/sessions/{session_id}/role
+```
+
+创建会话时可指定角色；省略后默认为 `general`：
+
+```json
+{
+  "title": "代码讨论",
+  "role_id": "code"
+}
+```
+
 ## 如何切换 LLM 模式
 
 启动前后端后，聊天页面顶部会显示当前模式：
@@ -206,9 +245,11 @@ POST /api/v1/llm/provider
 | `GET` | `/api/v1/health` | 健康检查 |
 | `GET` | `/api/v1/llm/provider` | 获取当前 LLM Provider |
 | `POST` | `/api/v1/llm/provider` | 切换当前 LLM Provider |
+| `GET` | `/api/v1/roles` | 获取预置助手角色 |
 | `GET` | `/api/v1/sessions` | 获取会话列表 |
 | `POST` | `/api/v1/sessions` | 创建会话 |
 | `GET` | `/api/v1/sessions/{session_id}` | 获取会话详情 |
+| `PATCH` | `/api/v1/sessions/{session_id}/role` | 修改当前会话角色 |
 | `POST` | `/api/v1/sessions/{session_id}/messages` | 发送消息 |
 
 成功响应：
@@ -232,6 +273,8 @@ POST /api/v1/llm/provider
 ## Mock 工具调用示例
 
 在 Mock 模式下可以输入：
+
+先在“助手角色”中分别选择代码、写作或面试助手，再发送同一句“请给我一些建议”，可观察回复中的“技术视角”“表达视角”或“面试视角”；通用助手保持普通 Mock 回复。
 
 ```text
 你好，介绍一下你自己
@@ -308,6 +351,7 @@ Windows 环境下如系统临时目录权限受限，可显式执行 `python -m 
 - 消息发送响应包含前端展示工具调用所需的 `tool_calls` 信息。
 - todo、消息和工具调用不跨 session 泄露。
 - 旧 SQLite schema 迁移兼容性。
+- 角色列表、默认/指定/非法角色、会话角色持久化和 Mock 角色差异。
 
 前端构建检查：
 
@@ -336,6 +380,8 @@ npm run typecheck
 9. 配置 DeepSeek Key 后重启后端，切换真实 API。
 10. 普通聊天走真实模型。
 11. 切回 Mock 后，工具调用仍可用。
+12. 新建会话前选择不同助手角色，确认会话列表和页头显示正确。
+13. 在 Mock 模式下用同一问题验证不同角色的回复侧重点。
 
 ## 已知限制
 
