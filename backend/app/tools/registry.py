@@ -19,6 +19,7 @@ from pydantic import (
 from sqlmodel import Session, select
 
 from app.models import Todo
+from app.services.knowledge import search_knowledge
 
 
 class ToolNotFoundError(Exception):
@@ -102,6 +103,25 @@ class TodoInput(ToolInput):
             raise ValueError("查询待办时不应提供 title。")
         return self
 
+
+
+class KnowledgeSearchInput(ToolInput):
+    query: str = Field(
+        min_length=1, max_length=2_000, strict=True,
+        description="要在当前会话知识库中检索的问题。",
+    )
+    top_k: int = Field(
+        default=3, ge=1, le=5, strict=True,
+        description="返回的相关片段数量，范围 1-5。",
+    )
+
+    @field_validator("query")
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        query = value.strip()
+        if not query:
+            raise ValueError("检索问题不能为空。")
+        return query
 
 ToolExecutor = Callable[[ToolContext, BaseModel], dict[str, Any]]
 
@@ -280,6 +300,11 @@ def todo_tool(context: ToolContext, payload: BaseModel) -> dict[str, Any]:
     }
 
 
+
+def knowledge_search(context: ToolContext, payload: BaseModel) -> dict[str, Any]:
+    data = KnowledgeSearchInput.model_validate(payload)
+    return search_knowledge(context.db, context.session_id, data.query, data.top_k)
+
 tool_registry = ToolRegistry()
 tool_registry.register(
     ToolDefinition(
@@ -301,6 +326,17 @@ tool_registry.register(
         failure_description="非法字符、非法语法、参数缺失或除零时返回结构化失败。",
     )
 )
+tool_registry.register(
+    ToolDefinition(
+        name="knowledge_search",
+        description="仅检索当前会话已上传的知识库文本，并返回相关片段和来源文件。",
+        input_model=KnowledgeSearchInput,
+        executor=knowledge_search,
+        result_description="返回 matched_chunks，每项含 filename、chunk_text、score 和 match_reason。",
+        failure_description="当前会话无文件或无匹配时返回友好的空结果状态。",
+    )
+)
+
 tool_registry.register(
     ToolDefinition(
         name="todo_tool",

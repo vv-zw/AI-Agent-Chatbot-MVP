@@ -20,6 +20,10 @@ TIME_QUERY_PHRASES = (
     "星期几",
 )
 TIME_QUERY_EXACT = {"时间", "时间？", "时间?", "日期", "日期？", "日期?"}
+KNOWLEDGE_QUERY_PHRASES = (
+    "根据我上传的文件", "根据上传的文件", "我上传的文件", "这个文档里",
+    "这份文档里", "文档中", "文件中", "知识库", "上传的文档",
+)
 
 
 def active_role(messages: list[dict[str, str]]) -> str:
@@ -105,6 +109,11 @@ def _first_phrase_position(content: str, phrases: tuple[str, ...]) -> int | None
 def plan_tool_calls(content: str) -> tuple[ToolCallRequest, ...]:
     """Build an ordered, independent tool plan from one Mock user request."""
     candidates: list[tuple[int, int, ToolCallRequest]] = []
+    knowledge_position = _first_phrase_position(content, KNOWLEDGE_QUERY_PHRASES)
+    if knowledge_position is not None:
+        candidates.append((knowledge_position, -1, ToolCallRequest(
+            name="knowledge_search", arguments={"query": content, "top_k": 3}
+        )))
     todo_match = TODO_CREATE_PATTERN.search(content)
     if todo_match:
         raw_title = todo_match.group(1).strip()
@@ -207,10 +216,11 @@ class MockLLMProvider:
                 content=role_response(
                     role,
                     (
-                        "Mock 模式目前可以演示基础聊天和 3 个本地工具：\n"
+                        "Mock 模式目前可以演示基础聊天和 4 个本地工具：\n"
                         "1. get_current_time：查询当前日期、时间和星期。\n"
                         "2. calculator：计算只包含数字、括号和 + - * / 的四则表达式。\n"
-                        "3. todo_tool：在当前会话里创建或列出待办。"
+                        "3. todo_tool：在当前会话里创建或列出待办。\n"
+                        "4. knowledge_search：检索当前会话上传的文本并展示引用。"
                     ),
                 )
             )
@@ -265,6 +275,17 @@ class MockLLMProvider:
         tool_result = result.get("result")
         if not isinstance(tool_result, dict):
             return f"工具 {tool_name} 已执行完成。"
+        if tool_name == "knowledge_search":
+            matches = tool_result.get("matched_chunks", [])
+            if not matches:
+                return str(tool_result.get("message") or "知识库中没有找到相关片段。")
+            lines = []
+            for index, chunk in enumerate(matches, 1):
+                excerpt = str(chunk.get("chunk_text", "")).strip().replace("\n", " ")
+                if len(excerpt) > 220:
+                    excerpt = excerpt[:220].rstrip() + "…"
+                lines.append(f"{index}. [{chunk.get('filename', '未知文件')}] “{excerpt}”")
+            return "根据当前会话的知识库，找到以下相关内容：\n" + "\n".join(lines)
         if tool_name == "get_current_time":
             return (f"当前日期是 {tool_result['date']}，时间是 {tool_result['time']}，"
                     f"{tool_result['weekday']}（{tool_result['timezone']}）。")
