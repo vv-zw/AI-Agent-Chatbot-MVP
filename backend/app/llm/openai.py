@@ -1,4 +1,6 @@
-﻿from typing import Any
+import json
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 
@@ -28,6 +30,99 @@ class OpenAICompatibleProvider:
         result: dict[str, Any],
     ) -> str:
         return "真实 API 模式当前仅支持普通聊天；工具调用请切回 Mock 模式演示。"
+
+    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
+        """Yield native OpenAI-compatible SSE content deltas."""
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "Accept": "text/event-stream",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": self._normalize_messages(messages),
+                        "temperature": 0.7,
+                        "stream": True,
+                    },
+                ) as response:
+                    response.raise_for_status()
+                    completed = False
+                    async for line in response.aiter_lines():
+                        if not line or line.startswith(":"):
+                            continue
+                        if not line.startswith("data:"):
+                            continue
+                        data = line[5:].strip()
+                        if data == "[DONE]":
+                            completed = True
+                            break
+                        delta = self._extract_stream_delta(data)
+                        if delta:
+                            yield delta
+                    if not completed:
+                        raise AppError(
+                            code="LLM_STREAM_INTERRUPTED",
+                            message="真实模型流式连接提前结束，请重试。",
+                            status_code=502,
+                        )
+        except AppError:
+            raise
+        except httpx.TimeoutException as exc:
+            raise AppError(
+                code="LLM_CALL_TIMEOUT",
+                message="真实模型调用超时，请稍后重试或切回 Mock 模式。",
+                status_code=504,
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            raise AppError(
+                code="LLM_CALL_FAILED",
+                message="真实模型调用失败，请检查后端模型配置或稍后重试。",
+                status_code=502,
+                details={"status_code": exc.response.status_code},
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise AppError(
+                code="LLM_CALL_FAILED",
+                message="真实模型网络请求失败，请检查网络、BASE_URL 或切回 Mock 模式。",
+                status_code=502,
+            ) from exc
+
+    @staticmethod
+    def _extract_stream_delta(data: str) -> str:
+        try:
+            payload = json.loads(data)
+        except ValueError as exc:
+            raise AppError(
+                code="LLM_INVALID_RESPONSE",
+                message="真实模型返回了无法解析的流式数据。",
+                status_code=502,
+            ) from exc
+        if not isinstance(payload, dict):
+            raise AppError(
+                code="LLM_INVALID_RESPONSE",
+                message="真实模型流式响应格式不正确。",
+                status_code=502,
+            )
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return ""
+        first_choice = choices[0]
+        delta = first_choice.get("delta") if isinstance(first_choice, dict) else None
+        content = delta.get("content") if isinstance(delta, dict) else None
+        if content is None:
+            return ""
+        if not isinstance(content, str):
+            raise AppError(
+                code="LLM_INVALID_RESPONSE",
+                message="真实模型流式响应格式不正确。",
+                status_code=502,
+            )
+        return content
 
     def _post_chat_completion(self, messages: list[dict[str, str]]) -> dict[str, Any]:
         try:

@@ -298,7 +298,7 @@ POST /api/v1/llm/provider
 
 服务端保证每条流以 `assistant_done` 或 `error` 结束；前端也会把没有终止事件的连接识别为中断，解除发送状态并显示错误，避免界面卡死。工具调用、`tool_calls` 记录和 `role=tool` 消息仍由原 Agent 流程统一持久化。
 
-当前实现优先保证 Mock 模式的可演示性：Mock 回复按固定长度切片并加入很短的片段间隔。真实 OpenAI-compatible 模式也可使用该接口，但当前是在完整模型响应返回后再分段下发，并非上游模型原生 token 流；后续可在不改变前端事件契约的前提下升级 Provider 原生流式调用。
+Mock 模式会按固定长度切片并加入很短的片段间隔。真实 DeepSeek / OpenAI-compatible 模式会向上游 `/chat/completions` 发送 `"stream": true`，异步读取 `data:` 事件中的 `choices[0].delta.content` 并立即转发；收到 `[DONE]` 后才保存完整 assistant 消息并发送 `assistant_done`。如果上游超时、返回非法事件或未以 `[DONE]` 结束，则发送统一 `error` 事件，已保存的用户消息保留，部分 assistant 内容不会落库。
 
 ## Mock 工具调用示例
 
@@ -401,6 +401,7 @@ Windows 环境下如系统临时目录权限受限，可显式执行 `python -m 
 - 旧 SQLite schema 迁移兼容性。
 - 角色列表、默认/指定/非法角色、会话角色持久化和 Mock 角色差异。
 - SSE 流式普通回复、工具阶段事件、统一错误事件，以及普通发送接口回归。
+- DeepSeek/OpenAI-compatible 原生 SSE 增量解析、`[DONE]` 校验、异常中断与完成后持久化。
 
 前端构建检查：
 
@@ -438,5 +439,5 @@ npm run typecheck
 - Mock LLM 基于规则和关键词，不等同真实模型推理能力。
 - 多工具按顺序编排执行，暂不支持并行工具调用。
 - Todo 仅支持创建和查询。
-- 真实 Provider 的 SSE 当前是完整响应后的分段下发，尚未接入上游模型原生 token 流。
+- 真实 Provider 流式输出当前仅处理最终回答 `delta.content`；`reasoning_content`、真实模型 tool calling 暂未展示。
 - 未实现登录、多用户隔离、权限系统和生产级限流。

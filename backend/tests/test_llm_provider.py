@@ -1,9 +1,11 @@
+import asyncio
 from typing import Any
 
 import httpx
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
+from app.core.errors import AppError
 from app.core.llm_provider_state import runtime_llm_provider_state
 from app.llm.openai import OpenAICompatibleProvider
 
@@ -256,3 +258,115 @@ def test_openai_mode_plain_chat_can_use_mocked_provider(
     data = response.json()["data"]
     assert data["assistant_message"]["content"] == "来自真实模式的普通聊天回复"
     assert data["tool_calls"] == []
+
+
+def test_openai_provider_streams_deepseek_sse_deltas(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeStreamResponse:
+        async def __aenter__(self) -> "FakeStreamResponse":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        def raise_for_status(self) -> None:
+            return None
+
+        async def aiter_lines(self):
+            yield ': keep-alive'
+            yield 'data: {"choices":[{"delta":{"role":"assistant","content":"你"}}]}'
+            yield 'data: {"choices":[{"delta":{"content":"好"}}]}'
+            yield 'data: {"choices":[],"usage":{"total_tokens":3}}'
+            yield 'data: [DONE]'
+
+    class FakeAsyncClient:
+        def __init__(self, timeout: float) -> None:
+            captured["timeout"] = timeout
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        def stream(
+            self,
+            method: str,
+            url: str,
+            headers: dict[str, str],
+            json: dict[str, Any],
+        ) -> FakeStreamResponse:
+            captured.update(method=method, url=url, headers=headers, json=json)
+            return FakeStreamResponse()
+
+    monkeypatch.setattr("app.llm.openai.httpx.AsyncClient", FakeAsyncClient)
+    provider = OpenAICompatibleProvider(
+        Settings(
+            llm_provider="openai",
+            openai_api_key="test-key",
+            openai_base_url="https://api.deepseek.com",
+            openai_model="deepseek-chat",
+        ),
+        timeout=5,
+    )
+
+    async def collect() -> list[str]:
+        messages = [{"role": "user", "content": "你好"}]
+        return [delta async for delta in provider.stream(messages)]
+
+    assert asyncio.run(collect()) == ["你", "好"]
+    assert captured["method"] == "POST"
+    assert captured["url"] == "https://api.deepseek.com/chat/completions"
+    assert captured["headers"]["Accept"] == "text/event-stream"
+    assert captured["json"]["stream"] is True
+    assert captured["json"]["messages"][-1] == {"role": "user", "content": "你好"}
+
+
+def test_openai_provider_rejects_stream_without_done(monkeypatch) -> None:
+    class FakeStreamResponse:
+        async def __aenter__(self) -> "FakeStreamResponse":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        def raise_for_status(self) -> None:
+            return None
+
+        async def aiter_lines(self):
+            yield 'data: {"choices":[{"delta":{"content":"partial"}}]}'
+
+    class FakeAsyncClient:
+        def __init__(self, timeout: float) -> None:
+            pass
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        def stream(self, *args: object, **kwargs: object) -> FakeStreamResponse:
+            return FakeStreamResponse()
+
+    monkeypatch.setattr("app.llm.openai.httpx.AsyncClient", FakeAsyncClient)
+    provider = OpenAICompatibleProvider(
+        Settings(
+            llm_provider="openai",
+            openai_api_key="test-key",
+            openai_base_url="https://api.deepseek.com",
+            openai_model="deepseek-chat",
+        )
+    )
+
+    async def collect() -> None:
+        async for _ in provider.stream([{"role": "user", "content": "hello"}]):
+            pass
+
+    try:
+        asyncio.run(collect())
+    except AppError as exc:
+        assert exc.code == "LLM_STREAM_INTERRUPTED"
+    else:
+        raise AssertionError("Expected interrupted stream error")

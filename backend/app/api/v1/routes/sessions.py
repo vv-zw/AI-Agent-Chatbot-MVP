@@ -10,7 +10,13 @@ from fastapi import APIRouter, status
 from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
-from app.agents.service import AgentService
+from app.agents.service import (
+    AgentService,
+    build_context,
+    get_llm_provider,
+    is_mode_status_question,
+    normalize_provider_name,
+)
 from app.api.deps import DatabaseSession
 from app.core.config import get_settings
 from app.core.errors import AppError, error_payload
@@ -227,6 +233,62 @@ def stream_message(
         try:
             yield sse_event("user_message_saved", {"user_message": saved_user})
             await asyncio.sleep(0)
+            provider_name = normalize_provider_name(payload.provider)
+            if provider_name == "openai" and not is_mode_status_question(content):
+                provider = get_llm_provider(settings, provider_name)
+                stream = getattr(provider, "stream", None)
+                if not callable(stream):
+                    raise AppError(
+                        code="LLM_STREAM_UNAVAILABLE",
+                        message="当前真实模型 Provider 不支持流式输出。",
+                        status_code=503,
+                    )
+                context = build_context(
+                    db,
+                    record.id,
+                    settings.max_context_messages,
+                    record.role_id,
+                )
+                deltas: list[str] = []
+                stream_result = stream(context)
+                if not hasattr(stream_result, "__aiter__"):
+                    raise AppError(
+                        code="LLM_STREAM_UNAVAILABLE",
+                        message="当前真实模型 Provider 不支持异步流式输出。",
+                        status_code=503,
+                    )
+                async for delta in stream_result:
+                    if not isinstance(delta, str):
+                        raise AppError(
+                            code="LLM_INVALID_RESPONSE",
+                            message="真实模型流式响应格式不正确。",
+                            status_code=502,
+                        )
+                    deltas.append(delta)
+                    yield sse_event("assistant_delta", {"delta": delta})
+                assistant_content = "".join(deltas)
+                if not assistant_content.strip():
+                    raise AppError(
+                        code="LLM_EMPTY_RESPONSE",
+                        message="真实模型未返回有效内容，请重试。",
+                        status_code=502,
+                    )
+                assistant_message = Message(
+                    session_id=record.id,
+                    role=MessageRole.ASSISTANT,
+                    content=assistant_content,
+                )
+                db.add(assistant_message)
+                db.commit()
+                db.refresh(assistant_message)
+                response = ChatResponse(
+                    user_message=MessageRead.model_validate(user_message),
+                    assistant_message=MessageRead.model_validate(assistant_message),
+                    tool_calls=[],
+                )
+                yield sse_event("assistant_done", response.model_dump(mode="json"))
+                return
+
             response = AgentService(settings).run(
                 db,
                 record,

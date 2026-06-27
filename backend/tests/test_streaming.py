@@ -6,10 +6,15 @@ from fastapi.testclient import TestClient
 from app.core.errors import AppError
 
 
-def send_stream(client: TestClient, session_id: str, content: str):
+def send_stream(
+    client: TestClient,
+    session_id: str,
+    content: str,
+    provider: str = "mock",
+):
     return client.post(
         f"/api/v1/sessions/{session_id}/messages/stream",
-        json={"content": content, "provider": "mock"},
+        json={"content": content, "provider": provider},
     )
 
 
@@ -104,3 +109,87 @@ def test_original_non_stream_endpoint_remains_available(
 
     assert response.status_code == 201
     assert response.json()["data"]["assistant_message"]["role"] == "assistant"
+
+
+def test_openai_mode_forwards_native_deltas_and_persists_on_done(
+    client: TestClient,
+    session_id: str,
+    monkeypatch,
+) -> None:
+    from app.api.v1.routes import sessions
+
+    class FakeStreamingProvider:
+        async def stream(self, messages: list[dict[str, str]]):
+            assert messages[-1] == {"role": "user", "content": "真实流式请求"}
+            yield "真实"
+            yield "接口"
+            yield "回复"
+
+    monkeypatch.setattr(
+        sessions,
+        "get_llm_provider",
+        lambda settings, provider_name=None: FakeStreamingProvider(),
+    )
+
+    response = send_stream(client, session_id, "真实流式请求", provider="openai")
+    events = parse_events(response.text)
+    names = [name for name, _ in events]
+
+    assert names == [
+        "user_message_saved",
+        "assistant_delta",
+        "assistant_delta",
+        "assistant_delta",
+        "assistant_done",
+    ]
+    assert [data["delta"] for name, data in events if name == "assistant_delta"] == [
+        "真实",
+        "接口",
+        "回复",
+    ]
+    done = events[-1][1]
+    assert done["assistant_message"]["content"] == "真实接口回复"
+    assert done["tool_calls"] == []
+
+    detail = client.get(f"/api/v1/sessions/{session_id}").json()["data"]
+    assert [(message["role"], message["content"]) for message in detail["messages"]] == [
+        ("user", "真实流式请求"),
+        ("assistant", "真实接口回复"),
+    ]
+
+
+def test_openai_stream_error_keeps_user_without_partial_assistant(
+    client: TestClient,
+    session_id: str,
+    monkeypatch,
+) -> None:
+    from app.api.v1.routes import sessions
+
+    class FailingStreamingProvider:
+        async def stream(self, messages: list[dict[str, str]]):
+            yield "部分内容"
+            raise AppError(
+                code="LLM_STREAM_INTERRUPTED",
+                message="真实模型流式连接提前结束，请重试。",
+                status_code=502,
+            )
+
+    monkeypatch.setattr(
+        sessions,
+        "get_llm_provider",
+        lambda settings, provider_name=None: FailingStreamingProvider(),
+    )
+
+    response = send_stream(client, session_id, "触发真实流异常", provider="openai")
+    events = parse_events(response.text)
+
+    assert [name for name, _ in events] == [
+        "user_message_saved",
+        "assistant_delta",
+        "error",
+    ]
+    assert events[-1][1]["error"]["code"] == "LLM_STREAM_INTERRUPTED"
+    detail = client.get(f"/api/v1/sessions/{session_id}").json()["data"]
+    assert [(message["role"], message["content"]) for message in detail["messages"]] == [
+        ("user", "触发真实流异常")
+    ]
