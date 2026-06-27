@@ -42,17 +42,30 @@ export default function App() {
   const [streamingPhase, setStreamingPhase] = useState<"saving" | "tool" | "replying" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const detailRequestId = useRef(0);
-  const messageEndRef = useRef<HTMLDivElement>(null);
+  const messageViewportRef = useRef<HTMLDivElement>(null);
+  const shouldFollowOutputRef = useRef(true);
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
   const selectedRoleId = activeSession?.role_id ?? newSessionRoleId;
 
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, isSending]);
+    if (!shouldFollowOutputRef.current) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = messageViewportRef.current;
+      if (!viewport) return;
+      viewport.scrollTo({
+        top: viewport.scrollHeight,
+        behavior: isSending ? "auto" : "smooth",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages, toolCalls, isSending, streamingPhase]);
 
   const loadSession = useCallback(async (sessionId: string) => {
     const requestId = ++detailRequestId.current;
+    shouldFollowOutputRef.current = true;
     setActiveSessionId(sessionId);
     setIsLoadingSession(true);
     setIsLoadingKnowledge(true);
@@ -267,6 +280,7 @@ export default function App() {
     if (!activeSessionId || isSending) return;
     const sessionId = activeSessionId;
     const provider = providerStatus?.provider ?? "mock";
+    shouldFollowOutputRef.current = true;
     setIsSending(true);
     setError(null);
     let optimisticUserId: string | null = null;
@@ -385,8 +399,8 @@ export default function App() {
     }
   }
   return (
-    <main className="min-h-screen bg-canvas p-0 text-ink md:p-5">
-      <div className="mx-auto grid min-h-screen max-w-[1440px] overflow-hidden border border-line bg-panel shadow-shell md:min-h-[calc(100vh-2.5rem)] md:grid-cols-[312px_minmax(0,1fr)] md:rounded-[1.75rem]">
+    <main className="h-[100dvh] overflow-hidden bg-canvas p-0 text-ink md:p-5">
+      <div className="mx-auto grid h-full max-w-[1440px] overflow-hidden border border-line bg-panel shadow-shell md:grid-cols-[312px_minmax(0,1fr)] md:rounded-[1.75rem]">
         <SessionSidebar
           activeSessionId={activeSessionId}
           isCreating={isCreating}
@@ -402,8 +416,8 @@ export default function App() {
           sessions={sessions}
         />
 
-        <section className="flex min-h-screen min-w-0 flex-col bg-parchment bg-arcana [background-size:36px_36px] md:min-h-0">
-          <header className="flex min-h-24 flex-wrap items-center gap-3 border-b border-line bg-panel/90 px-4 py-3 sm:px-7">
+        <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-parchment bg-arcana [background-size:36px_36px]">
+          <header className="flex min-h-24 shrink-0 flex-wrap items-center gap-3 border-b border-line bg-panel/90 px-4 py-3 sm:px-7">
             <div className="md:hidden"><LogoMark /></div>
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">魔法书页面 · 当前工作台</p>
@@ -454,7 +468,16 @@ export default function App() {
             </div>
           )}
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-7">
+          <div
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-6 [scrollbar-gutter:stable] sm:px-7"
+            onScroll={(event) => {
+              if (isSending) return;
+              const viewport = event.currentTarget;
+              shouldFollowOutputRef.current =
+                viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 96;
+            }}
+            ref={messageViewportRef}
+          >
             {isLoadingSession && (
               <div className="mx-auto max-w-4xl space-y-5" aria-label="正在加载消息">
                 <div className="h-24 w-2/3 animate-pulse rounded-3xl border border-line bg-panel" />
@@ -496,7 +519,7 @@ export default function App() {
                     </div>
                   </div>
                 )}
-                <div ref={messageEndRef} />
+                <div aria-hidden="true" className="h-px" />
               </div>
             )}
           </div>

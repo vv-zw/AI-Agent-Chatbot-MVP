@@ -53,7 +53,7 @@ export function ChatComposer({
   }
 
   return (
-    <footer className="border-t border-line bg-panel/95 px-4 py-4 sm:px-7">
+    <footer className="shrink-0 border-t border-line bg-panel/95 px-4 py-4 shadow-[0_-10px_30px_rgba(46,41,59,0.04)] sm:px-7">
       <form
         className="mx-auto flex max-w-4xl items-end gap-3 rounded-3xl border border-line bg-[#fffaf1] p-2 shadow-scroll transition focus-within:border-brand/35 focus-within:ring-4 focus-within:ring-brand/10"
         onSubmit={handleSubmit}
