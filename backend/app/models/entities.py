@@ -91,3 +91,24 @@ class Todo(SQLModel, table=True):
     status: TodoStatus = Field(default=TodoStatus.PENDING, index=True)
     created_at: datetime = Field(default_factory=utc_now, index=True)
     updated_at: datetime = Field(default_factory=utc_now, index=True)
+
+class KnowledgeFile(SQLModel, table=True):
+    __tablename__ = "knowledge_files"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    session_id: UUID = Field(foreign_key="sessions.id", index=True)
+    filename: str = Field(max_length=255)
+    content_type: str = Field(max_length=100)
+    size: int
+    created_at: datetime = Field(default_factory=utc_now, index=True)
+
+
+class KnowledgeChunk(SQLModel, table=True):
+    __tablename__ = "knowledge_chunks"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    file_id: UUID = Field(foreign_key="knowledge_files.id", index=True)
+    session_id: UUID = Field(foreign_key="sessions.id", index=True)
+    chunk_index: int = Field(index=True)
+    content: str = Field(sa_column=Column(Text, nullable=False))
+    created_at: datetime = Field(default_factory=utc_now, index=True)

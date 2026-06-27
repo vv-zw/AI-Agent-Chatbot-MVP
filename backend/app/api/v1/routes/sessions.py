@@ -20,7 +20,15 @@ from app.agents.service import (
 from app.api.deps import DatabaseSession
 from app.core.config import get_settings
 from app.core.errors import AppError, error_payload
-from app.models import Message, MessageRole, SessionRecord, Todo, ToolCall
+from app.models import (
+    KnowledgeChunk,
+    KnowledgeFile,
+    Message,
+    MessageRole,
+    SessionRecord,
+    Todo,
+    ToolCall,
+)
 from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
@@ -151,7 +159,7 @@ def delete_session(
 ) -> ApiResponse[dict[str, str]]:
     record = get_session_or_404(db, session_id)
 
-    for model in (ToolCall, Message, Todo):
+    for model in (KnowledgeChunk, KnowledgeFile, ToolCall, Message, Todo):
         items = db.exec(select(model).where(model.session_id == session_id)).all()
         for item in items:
             db.delete(item)

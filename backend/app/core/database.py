@@ -97,7 +97,14 @@ def _finish_legacy_todo_migration(database_engine: Engine) -> None:
 
 def create_db_and_tables(database_engine: Engine = engine) -> None:
     # Importing models registers SQLModel metadata before create_all.
-    from app.models import Message, SessionRecord, Todo, ToolCall  # noqa: F401
+    from app.models import (  # noqa: F401
+        KnowledgeChunk,
+        KnowledgeFile,
+        Message,
+        SessionRecord,
+        Todo,
+        ToolCall,
+    )
 
     migrate_todos = _prepare_legacy_sqlite(database_engine)
     SQLModel.metadata.create_all(database_engine)

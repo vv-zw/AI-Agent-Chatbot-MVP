@@ -1,4 +1,6 @@
 from app.models.entities import (
+    KnowledgeChunk,
+    KnowledgeFile,
     Message,
     MessageRole,
     SessionRecord,
@@ -9,6 +11,8 @@ from app.models.entities import (
 )
 
 __all__ = [
+    "KnowledgeChunk",
+    "KnowledgeFile",
     "Message",
     "MessageRole",
     "SessionRecord",

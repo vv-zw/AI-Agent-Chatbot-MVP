@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     ]
     max_context_messages: int = 20
     max_user_message_length: int = 10_000
+    max_knowledge_file_size: int = 1_048_576
 
     llm_provider: str = "mock"
     openai_api_key: str | None = None
