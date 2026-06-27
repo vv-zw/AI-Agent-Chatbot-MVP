@@ -7,7 +7,7 @@ import { ProviderSwitcher } from "./components/ProviderSwitcher";
 import { RoleSwitcher } from "./components/RoleSwitcher";
 import { LogoMark, SessionSidebar } from "./components/SessionSidebar";
 import { api } from "./lib/api";
-import type { ChatbotRole, ChatMessage, ChatSession, LLMProviderName, LLMProviderStatus, KnowledgeFile, ToolCall } from "./types/api";
+import type { ChatbotRole, ChatMessage, ChatSession, FeedbackRating, LLMProviderName, LLMProviderStatus, KnowledgeFile, ToolCall } from "./types/api";
 
 const MAX_USER_MESSAGE_LENGTH = 10_000;
 
@@ -276,6 +276,21 @@ export default function App() {
       setIsUploadingKnowledge(false);
     }
   }
+  async function submitFeedback(messageId: string, rating: FeedbackRating, reason: string) {
+    const message = messages.find((item) => item.id === messageId);
+    if (!message || message.role !== "assistant") {
+      throw new Error("只能对已保存的 AI 回复提交反馈。");
+    }
+
+    const feedback = await api.submitFeedback(
+      message.session_id,
+      messageId,
+      { rating, reason },
+    );
+    setMessages((current) => current.map((item) =>
+      item.id === messageId ? { ...item, feedback } : item));
+  }
+
   async function sendMessage(content: string) {
     if (!activeSessionId || isSending) return;
     const sessionId = activeSessionId;
@@ -508,7 +523,7 @@ export default function App() {
 
             {!isLoadingSession && (messages.length > 0 || isSending) && (
               <div className="mx-auto max-w-4xl space-y-5">
-                <MessageTimeline messages={messages} toolCalls={toolCalls} />
+                <MessageTimeline messages={messages} onFeedback={submitFeedback} toolCalls={toolCalls} />
 
                 {isSending && (
                   <div className="flex gap-3" aria-live="polite">

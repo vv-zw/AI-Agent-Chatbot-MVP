@@ -17,6 +17,11 @@ class MessageRole(StrEnum):
     TOOL = "tool"
 
 
+class FeedbackRating(StrEnum):
+    LIKE = "like"
+    DISLIKE = "dislike"
+
+
 class ToolCallStatus(StrEnum):
     PENDING = "pending"
     SUCCEEDED = "succeeded"
@@ -50,6 +55,22 @@ class Message(SQLModel, table=True):
         sa_column=Column("metadata", JSON, nullable=False),
     )
     created_at: datetime = Field(default_factory=utc_now, index=True)
+
+
+class Feedback(SQLModel, table=True):
+    __tablename__ = "feedbacks"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    session_id: UUID = Field(foreign_key="sessions.id", index=True)
+    message_id: UUID = Field(
+        foreign_key="messages.id",
+        index=True,
+        unique=True,
+    )
+    rating: FeedbackRating = Field(index=True)
+    reason: str = Field(default="", sa_column=Column(Text, nullable=False))
+    created_at: datetime = Field(default_factory=utc_now, index=True)
+    updated_at: datetime = Field(default_factory=utc_now, index=True)
 
 
 class ToolCall(SQLModel, table=True):

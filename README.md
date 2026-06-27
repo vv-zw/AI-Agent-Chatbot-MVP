@@ -15,6 +15,7 @@
 - OpenAI-compatible Provider 支持 DeepSeek 普通聊天。
 - 会话级助手角色切换，预置通用、代码、写作、面试 4 个角色。
 - 角色 system prompt 同时作用于 Mock 和真实 Provider 上下文。
+- 支持对 AI 回复点赞或点踩，可选填写原因，并将反馈持久化到 SQLite。
 - 统一响应格式：成功 `{ "data": ... }`，失败 `{ "error": { "code", "message", "details" } }`。
 
 ## 目录结构
@@ -237,6 +238,48 @@ POST /api/v1/llm/provider
 }
 ```
 
+## 用户反馈
+
+每条已保存的 assistant 消息下方都有轻量反馈入口：
+
+- 点赞会直接提交，不打断聊天和消息发送流程。
+- 点踩会展开原因输入框，原因可留空，最长 500 个字符。
+- 提交后显示“已点赞 / 已点踩”状态；接口失败时仅在对应消息下展示错误。
+- 同一条消息只保存一条反馈，但允许再次操作覆盖更新，方便纠正误触或补充原因。
+
+反馈接口使用会话嵌套路径，以便后端同时校验 message 是否存在、是否为 assistant 消息，以及是否属于当前 session：
+
+```http
+POST /api/v1/sessions/{session_id}/messages/{message_id}/feedback
+```
+
+请求示例：
+
+```json
+{
+  "rating": "dislike",
+  "reason": "回答不够准确"
+}
+```
+
+成功响应继续遵守统一 API 契约：
+
+```json
+{
+  "data": {
+    "id": "...",
+    "session_id": "...",
+    "message_id": "...",
+    "rating": "dislike",
+    "reason": "回答不够准确",
+    "created_at": "...",
+    "updated_at": "..."
+  }
+}
+```
+
+反馈保存在 `feedbacks` 表中，字段包括 `id`、`session_id`、`message_id`、`rating`、`reason`、`created_at` 和 `updated_at`；`message_id` 具有唯一约束。`GET /api/v1/sessions/{session_id}` 会把反馈作为消息的 `feedback` 字段返回，页面刷新后仍能恢复反馈状态。当前反馈用于收集回答质量信号，后续可用于离线评估、问题归因和模型优化。
+
 ## 主要 API
 
 所有业务接口均使用 `/api/v1` 前缀。
@@ -255,6 +298,7 @@ POST /api/v1/llm/provider
 | `POST` | `/api/v1/sessions/{session_id}/knowledge/files` | 上传文本文件（multipart/form-data） |
 | `POST` | `/api/v1/sessions/{session_id}/messages` | 普通发送消息（保留为 fallback） |
 | `POST` | `/api/v1/sessions/{session_id}/messages/stream` | 发送消息并返回 SSE 事件流 |
+| `POST` | `/api/v1/sessions/{session_id}/messages/{message_id}/feedback` | 新增或更新 AI 回复反馈 |
 
 成功响应：
 
@@ -424,6 +468,7 @@ Windows 环境下如系统临时目录权限受限，可显式执行 `python -m 
 - 角色列表、默认/指定/非法角色、会话角色持久化和 Mock 角色差异。
 - SSE 流式普通回复、工具阶段事件、统一错误事件，以及普通发送接口回归。
 - DeepSeek/OpenAI-compatible 原生 SSE 增量解析、`[DONE]` 校验、异常中断与完成后持久化。
+- assistant 点赞、带原因点踩、非法反馈校验、覆盖更新和会话详情反馈回显。
 
 前端构建检查：
 

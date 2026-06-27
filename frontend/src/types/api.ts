@@ -1,4 +1,5 @@
 export type MessageRole = "user" | "assistant" | "tool";
+export type FeedbackRating = "like" | "dislike";
 export type ToolCallStatus = "pending" | "succeeded" | "failed";
 export type LLMProviderName = "mock" | "openai";
 
@@ -56,6 +57,21 @@ export interface ChatSession {
   updated_at: string;
 }
 
+export interface MessageFeedback {
+  id: string;
+  session_id: string;
+  message_id: string;
+  rating: FeedbackRating;
+  reason: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FeedbackSubmitRequest {
+  rating: FeedbackRating;
+  reason?: string;
+}
+
 export interface ChatMessage {
   id: string;
   session_id: string;
@@ -63,6 +79,7 @@ export interface ChatMessage {
   content: string;
   created_at: string;
   delivery_status?: "streaming" | "complete" | "failed";
+  feedback?: MessageFeedback | null;
 }
 
 export interface ToolCall {

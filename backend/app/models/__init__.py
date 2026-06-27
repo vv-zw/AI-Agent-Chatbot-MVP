@@ -1,4 +1,6 @@
 from app.models.entities import (
+    Feedback,
+    FeedbackRating,
     KnowledgeChunk,
     KnowledgeFile,
     Message,
@@ -11,6 +13,8 @@ from app.models.entities import (
 )
 
 __all__ = [
+    "Feedback",
+    "FeedbackRating",
     "KnowledgeChunk",
     "KnowledgeFile",
     "Message",

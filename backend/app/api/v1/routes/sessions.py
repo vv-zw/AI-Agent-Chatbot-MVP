@@ -21,6 +21,7 @@ from app.api.deps import DatabaseSession
 from app.core.config import get_settings
 from app.core.errors import AppError, error_payload
 from app.models import (
+    Feedback,
     KnowledgeChunk,
     KnowledgeFile,
     Message,
@@ -124,6 +125,13 @@ def get_session(
         .where(Message.session_id == session_id)
         .order_by(Message.created_at)
     ).all()
+    feedbacks = db.exec(
+        select(Feedback).where(Feedback.session_id == session_id)
+    ).all()
+    feedback_by_message = {
+        feedback.message_id: feedback
+        for feedback in feedbacks
+    }
     tool_calls = db.exec(
         select(ToolCall)
         .where(ToolCall.session_id == session_id)
@@ -132,7 +140,13 @@ def get_session(
     return ApiResponse(
         data=SessionDetail(
             **session_read(record).model_dump(),
-            messages=[MessageRead.model_validate(item) for item in messages],
+            messages=[
+                MessageRead(
+                    **MessageRead.model_validate(item).model_dump(exclude={"feedback"}),
+                    feedback=feedback_by_message.get(item.id),
+                )
+                for item in messages
+            ],
             tool_calls=[ToolCallRead.model_validate(item) for item in tool_calls],
         )
     )
@@ -159,7 +173,7 @@ def delete_session(
 ) -> ApiResponse[dict[str, str]]:
     record = get_session_or_404(db, session_id)
 
-    for model in (KnowledgeChunk, KnowledgeFile, ToolCall, Message, Todo):
+    for model in (KnowledgeChunk, KnowledgeFile, Feedback, ToolCall, Message, Todo):
         items = db.exec(select(model).where(model.session_id == session_id)).all()
         for item in items:
             db.delete(item)

@@ -1,8 +1,11 @@
-import type { ChatMessage, ToolCall } from "../types/api";
+import { MessageFeedback } from "./MessageFeedback";
+
+import type { ChatMessage, FeedbackRating, ToolCall } from "../types/api";
 
 interface MessageTimelineProps {
   messages: ChatMessage[];
   toolCalls: ToolCall[];
+  onFeedback: (messageId: string, rating: FeedbackRating, reason: string) => Promise<void>;
 }
 
 interface KnowledgeMatch {
@@ -177,7 +180,13 @@ function ToolCallGroup({ calls }: { calls: ToolCall[] }) {
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({
+  message,
+  onFeedback,
+}: {
+  message: ChatMessage;
+  onFeedback: MessageTimelineProps["onFeedback"];
+}) {
   const isUser = message.role === "user";
   const isTool = message.role === "tool";
   const label = isUser ? "用户指令" : isTool ? "工具" : "Agent 回信";
@@ -207,12 +216,21 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           {message.delivery_status === "failed" && <span className="text-danger">已中断</span>}
         </div>
         <p className="whitespace-pre-wrap break-words text-sm leading-7">{message.content}{message.delivery_status === "streaming" && <span className="ml-1 inline-block h-4 w-1 animate-pulse bg-brand align-middle" />}</p>
+        {!isUser && !isTool
+          && message.delivery_status !== "streaming"
+          && message.delivery_status !== "failed" && (
+          <MessageFeedback
+            feedback={message.feedback}
+            messageId={message.id}
+            onSubmit={(rating, reason) => onFeedback(message.id, rating, reason)}
+          />
+        )}
       </div>
     </article>
   );
 }
 
-export function MessageTimeline({ messages, toolCalls }: MessageTimelineProps) {
+export function MessageTimeline({ messages, toolCalls, onFeedback }: MessageTimelineProps) {
   const renderedCallIds = new Set<string>();
   const visibleMessages = messages.filter((message) => message.role !== "tool");
 
@@ -228,7 +246,7 @@ export function MessageTimeline({ messages, toolCalls }: MessageTimelineProps) {
 
         return (
           <div className="relative space-y-3 before:absolute before:left-[18px] before:top-12 before:h-[calc(100%-3rem)] before:w-px before:bg-gradient-to-b before:from-accent/70 before:to-line last:before:hidden" key={message.id}>
-            <MessageBubble message={message} />
+            <MessageBubble message={message} onFeedback={onFeedback} />
             <ToolCallGroup calls={relatedCalls} />
           </div>
         );

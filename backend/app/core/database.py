@@ -98,6 +98,7 @@ def _finish_legacy_todo_migration(database_engine: Engine) -> None:
 def create_db_and_tables(database_engine: Engine = engine) -> None:
     # Importing models registers SQLModel metadata before create_all.
     from app.models import (  # noqa: F401
+        Feedback,
         KnowledgeChunk,
         KnowledgeFile,
         Message,

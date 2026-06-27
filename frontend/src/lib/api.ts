@@ -7,7 +7,9 @@ import type {
   ChatStreamEventHandler,
   ChatSession,
   ChatbotRole,
+  FeedbackSubmitRequest,
   HealthStatus,
+  MessageFeedback,
   LLMProviderStatus,
   LLMProviderSwitchRequest,
   LLMProviderSwitchResponse,
@@ -232,6 +234,12 @@ export const api = {
 
   getSession: (sessionId: string) =>
     request<SessionDetail>(sessionPath(sessionId)),
+
+  submitFeedback: (sessionId: string, messageId: string, payload: FeedbackSubmitRequest) =>
+    request<MessageFeedback>(`${sessionPath(sessionId)}/messages/${encodeURIComponent(messageId)}/feedback`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   updateSessionRole: (sessionId: string, payload: SessionRoleUpdateRequest) =>
     request<ChatSession>(`${sessionPath(sessionId)}/role`, {

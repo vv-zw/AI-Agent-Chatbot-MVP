@@ -20,7 +20,7 @@ from app.core.database import get_db_session
 from app.core.llm_provider_state import runtime_llm_provider_state
 from app.main import app
 from app.models import (
-    KnowledgeChunk, KnowledgeFile, Message, SessionRecord, Todo, ToolCall,
+    Feedback, KnowledgeChunk, KnowledgeFile, Message, SessionRecord, Todo, ToolCall,
 )
 
 
@@ -45,6 +45,7 @@ def clean_database() -> Generator[None, None, None]:
     get_settings.cache_clear()
     runtime_llm_provider_state.reset("mock")
     with Session(TEST_ENGINE) as session:
+        session.exec(delete(Feedback))
         session.exec(delete(KnowledgeChunk))
         session.exec(delete(KnowledgeFile))
         session.exec(delete(ToolCall))
@@ -56,6 +57,7 @@ def clean_database() -> Generator[None, None, None]:
     get_settings.cache_clear()
     runtime_llm_provider_state.reset("mock")
     with Session(TEST_ENGINE) as session:
+        session.exec(delete(Feedback))
         session.exec(delete(KnowledgeChunk))
         session.exec(delete(KnowledgeFile))
         session.exec(delete(ToolCall))
