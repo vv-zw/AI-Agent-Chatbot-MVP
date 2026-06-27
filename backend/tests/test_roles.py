@@ -82,3 +82,31 @@ def test_mock_reply_reflects_session_role(
 
     assert response.status_code == 201
     assert expected_marker in response.json()["data"]["assistant_message"]["content"]
+
+
+def test_mock_tool_result_keeps_current_role(client: TestClient) -> None:
+    created = client.post("/api/v1/sessions", json={"role_id": "code"})
+    session_id = created.json()["data"]["id"]
+
+    response = client.post(
+        f"/api/v1/sessions/{session_id}/messages",
+        json={"content": "时间"},
+    )
+
+    assert response.status_code == 201
+    data = response.json()["data"]
+    assert data["tool_calls"][0]["tool_name"] == "get_current_time"
+    assert "Mock - 代码助手" in data["assistant_message"]["content"]
+
+
+def test_mock_capability_reply_keeps_current_role(client: TestClient) -> None:
+    created = client.post("/api/v1/sessions", json={"role_id": "writing"})
+    session_id = created.json()["data"]["id"]
+
+    response = client.post(
+        f"/api/v1/sessions/{session_id}/messages",
+        json={"content": "你都能做什么"},
+    )
+
+    assert response.status_code == 201
+    assert "Mock - 写作助手" in response.json()["data"]["assistant_message"]["content"]

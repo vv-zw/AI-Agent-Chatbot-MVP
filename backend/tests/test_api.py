@@ -53,6 +53,33 @@ def test_time_tool_call(client: TestClient, session_id: str) -> None:
     assert tool_call["status"] == "succeeded"
     assert set(tool_call["result"]) == {"date", "time", "timezone", "weekday"}
 
+
+def test_time_tool_accepts_common_short_phrases(
+    client: TestClient,
+    session_id: str,
+) -> None:
+    for prompt in ("时间", "现在什么时间"):
+        response = send_message(client, session_id, prompt)
+
+        assert response.status_code == 201
+        data = response.json()["data"]
+        assert data["tool_calls"][0]["tool_name"] == "get_current_time"
+        assert data["tool_calls"][0]["status"] == "succeeded"
+        assert "当前日期" in data["assistant_message"]["content"]
+
+
+def test_calculator_capability_phrase_requests_an_expression(
+    client: TestClient,
+    session_id: str,
+) -> None:
+    response = send_message(client, session_id, "计算四则表达式")
+
+    assert response.status_code == 201
+    data = response.json()["data"]
+    assert data["tool_calls"] == []
+    assert "请提供具体的四则表达式" in data["assistant_message"]["content"]
+
+
 def test_mock_lists_available_tools(client: TestClient, session_id: str) -> None:
     response = send_message(client, session_id, "你都有哪些工具可以调用")
 

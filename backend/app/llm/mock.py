@@ -9,6 +9,17 @@ CALCULATION_PATTERN = re.compile(r"(?<!\w)([-+*/().\d\s]*\d\s*[-+*/]\s*[-+*/().\
 PROJECT_NAME_PATTERN = re.compile(
     r"(?:我这个项目|项目)\s*(?:叫|名为)\s*([^\n。！？!?]+)"
 )
+TIME_QUERY_PHRASES = (
+    "现在几点",
+    "几点了",
+    "现在什么时间",
+    "现在的时间",
+    "当前时间",
+    "今天日期",
+    "今天几号",
+    "星期几",
+)
+TIME_QUERY_EXACT = {"时间", "时间？", "时间?", "日期", "日期？", "日期?"}
 
 
 def active_role(messages: list[dict[str, str]]) -> str:
@@ -59,6 +70,25 @@ def role_default_reply(role: str, latest: str) -> str:
     return f"[Mock] 我收到了：{latest}"
 
 
+def role_response(role: str, content: str) -> str:
+    labels = {
+        "code": "[Mock - 代码助手]",
+        "writing": "[Mock - 写作助手]",
+        "interview": "[Mock - 面试助手]",
+    }
+    label = labels.get(role)
+    return f"{label} {content}" if label else content
+
+
+def is_time_query(content: str) -> bool:
+    normalized = content.strip().replace(" ", "")
+    if "时间复杂度" in normalized:
+        return False
+    return normalized in TIME_QUERY_EXACT or any(
+        phrase in normalized for phrase in TIME_QUERY_PHRASES
+    )
+
+
 class MockLLMProvider:
     def complete(self, messages: list[dict[str, str]]) -> LLMResult:
         latest = messages[-1]["content"].strip() if messages else ""
@@ -84,7 +114,7 @@ class MockLLMProvider:
                 )
             )
 
-        if any(keyword in latest for keyword in ("现在几点", "今天日期", "星期几")):
+        if is_time_query(latest):
             return LLMResult(
                 tool_call=ToolCallRequest(name="get_current_time", arguments={})
             )
@@ -99,6 +129,15 @@ class MockLLMProvider:
             )
         if latest.startswith(("计算", "算一下", "帮我算")):
             expression = re.sub(r"^(计算|算一下|帮我算)\s*[：:]?\s*", "", latest)
+            if not any(character.isdigit() for character in expression):
+                if any(keyword in expression for keyword in ("四则", "表达式", "算式")):
+                    return LLMResult(
+                        content=role_response(
+                            role,
+                            "请提供具体的四则表达式，例如：计算 (8 + 4) / 3。",
+                        )
+                    )
+                return LLMResult(content=role_default_reply(role, latest))
             return LLMResult(
                 tool_call=ToolCallRequest(
                     name="calculator",
@@ -152,11 +191,14 @@ class MockLLMProvider:
             )
         ):
             return LLMResult(
-                content=(
-                    "Mock 模式目前可以演示基础聊天和 3 个本地工具：\n"
-                    "1. get_current_time：查询当前日期、时间和星期。\n"
-                    "2. calculator：计算只包含数字、括号和 + - * / 的四则表达式。\n"
-                    "3. todo_tool：在当前会话里创建或列出待办。"
+                content=role_response(
+                    role,
+                    (
+                        "Mock 模式目前可以演示基础聊天和 3 个本地工具：\n"
+                        "1. get_current_time：查询当前日期、时间和星期。\n"
+                        "2. calculator：计算只包含数字、括号和 + - * / 的四则表达式。\n"
+                        "3. todo_tool：在当前会话里创建或列出待办。"
+                    ),
                 )
             )
 
@@ -180,29 +222,39 @@ class MockLLMProvider:
         tool_name: str,
         result: dict[str, Any],
     ) -> str:
+        role = active_role(messages)
         if result.get("status") == "failed":
-            return (
-                f"工具 {tool_name} 调用失败："
-                f"{result.get('error_message') or '请检查参数后重试。'}"
+            return role_response(
+                role,
+                (
+                    f"工具 {tool_name} 调用失败："
+                    f"{result.get('error_message') or '请检查参数后重试。'}"
+                ),
             )
 
         tool_result = result.get("result")
         if not isinstance(tool_result, dict):
-            return f"工具 {tool_name} 已执行完成。"
+            return role_response(role, f"工具 {tool_name} 已执行完成。")
 
         if tool_name == "get_current_time":
-            return (
-                f"当前日期是 {tool_result['date']}，时间是 {tool_result['time']}，"
-                f"{tool_result['weekday']}（{tool_result['timezone']}）。"
+            return role_response(
+                role,
+                (
+                    f"当前日期是 {tool_result['date']}，时间是 {tool_result['time']}，"
+                    f"{tool_result['weekday']}（{tool_result['timezone']}）。"
+                ),
             )
         if tool_name == "calculator":
-            return f"计算结果：{tool_result['expression']} = {tool_result['value']}"
+            return role_response(
+                role,
+                f"计算结果：{tool_result['expression']} = {tool_result['value']}",
+            )
         if tool_name == "todo_tool" and tool_result.get("action") == "create":
-            return f"已记下待办：{tool_result['todo']['title']}"
+            return role_response(role, f"已记下待办：{tool_result['todo']['title']}")
         if tool_name == "todo_tool" and tool_result.get("action") == "list":
             todos = tool_result.get("todos", [])
             if not todos:
-                return "当前会话还没有待办事项。"
+                return role_response(role, "当前会话还没有待办事项。")
             lines = [f"{index}. {todo['title']}" for index, todo in enumerate(todos, 1)]
-            return "当前会话的待办：\n" + "\n".join(lines)
-        return f"工具 {tool_name} 已执行完成：{tool_result}"
+            return role_response(role, "当前会话的待办：\n" + "\n".join(lines))
+        return role_response(role, f"工具 {tool_name} 已执行完成：{tool_result}")
