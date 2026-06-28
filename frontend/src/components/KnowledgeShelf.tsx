@@ -26,17 +26,17 @@ export function KnowledgeShelf({
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <section className="border-b border-line bg-[#f7f1ff]/75 px-4 py-3 sm:px-7" aria-label="当前会话知识库">
-      <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-3">
+    <section className="shrink-0 border-b border-line bg-[#f7f1ff]/75 px-3 py-2 sm:px-7 sm:py-3" aria-label="当前会话知识库">
+      <div className="mx-auto grid max-w-4xl grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:flex-wrap sm:gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="grid size-8 shrink-0 place-items-center rounded-xl border border-brand/20 bg-panel text-sm text-brandDeep">⌘</span>
+          <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-brand/20 bg-panel text-xs text-brandDeep sm:size-8 sm:rounded-xl sm:text-sm">⌘</span>
           <div>
             <p className="text-xs font-semibold text-ink">资料夹</p>
-            <p className="text-[11px] text-muted">仅当前卷轴可检索 · TXT / MD / CSV / JSON</p>
+            <p className="hidden text-[11px] text-muted sm:block">仅当前卷轴可检索 · TXT / MD / CSV / JSON</p>
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto py-1">
+        <div className="order-3 col-span-2 flex min-w-0 w-full gap-2 overflow-x-auto py-0.5 sm:order-none sm:w-auto sm:flex-1 sm:py-1">
           {isLoading && <span className="animate-pulse text-xs text-muted">正在展开资料夹…</span>}
           {!isLoading && files.length === 0 && <span className="text-xs text-muted">还没有资料，上传后即可在对话里引用。</span>}
           {files.map((file) => (
@@ -61,7 +61,7 @@ export function KnowledgeShelf({
           type="file"
         />
         <button
-          className="shrink-0 rounded-xl border border-brand/20 bg-panel px-3 py-2 text-xs font-semibold text-brandDeep transition hover:border-brand/40 hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand/10 disabled:opacity-50"
+          className="shrink-0 rounded-xl border border-brand/20 bg-panel px-2.5 py-2 text-xs font-semibold text-brandDeep transition hover:border-brand/40 hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand/10 disabled:opacity-50"
           disabled={disabled || isUploading}
           onClick={() => inputRef.current?.click()}
           type="button"

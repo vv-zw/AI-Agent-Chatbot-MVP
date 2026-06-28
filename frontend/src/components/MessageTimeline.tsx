@@ -128,7 +128,7 @@ function ToolCallCard({ call, sequence, total }: { call: ToolCall; sequence: num
   }[call.status];
 
   return (
-    <article className="ml-12 max-w-2xl overflow-hidden rounded-3xl border border-line bg-panel shadow-scroll">
+    <article className="max-w-2xl overflow-hidden rounded-2xl border border-line bg-panel shadow-scroll sm:ml-12 sm:rounded-3xl">
       <div className="relative border-b border-line bg-[#fbf2df] px-4 py-3">
         <div className="absolute right-4 top-3 text-accent/70">✦</div>
         <div className="flex items-start justify-between gap-3 pr-8">
@@ -168,7 +168,7 @@ function ToolCallGroup({ calls }: { calls: ToolCall[] }) {
   return (
     <section aria-label={`工具调用编排，共 ${calls.length} 步`} className="space-y-3">
       {calls.length > 1 && (
-        <div className="ml-12 flex max-w-2xl items-center gap-3 rounded-2xl border border-brand/15 bg-[#f3edff]/80 px-4 py-2.5 text-xs text-brandDeep">
+        <div className="flex max-w-2xl items-center gap-2 rounded-2xl border border-brand/15 bg-[#f3edff]/80 px-3 py-2.5 text-xs text-brandDeep sm:ml-12 sm:gap-3 sm:px-4">
           <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand text-[11px] font-bold text-white">{calls.length}</span>
           <span><strong>多工具编排</strong>：按顺序执行 {calls.length} 个独立步骤</span>
         </div>
@@ -192,8 +192,8 @@ function MessageBubble({
   const label = isUser ? "用户指令" : isTool ? "工具" : "Agent 回信";
 
   return (
-    <article className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
-      <div className={`grid size-9 shrink-0 place-items-center rounded-2xl border text-xs font-semibold ${
+    <article className={`flex gap-2 sm:gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
+      <div className={`grid size-8 shrink-0 place-items-center rounded-xl border text-[11px] font-semibold sm:size-9 sm:rounded-2xl sm:text-xs ${
         isUser
           ? "border-brand/25 bg-brand text-white"
           : isTool
@@ -202,7 +202,7 @@ function MessageBubble({
       }`}>
         {isTool ? "T" : isUser ? "令" : "回"}
       </div>
-      <div className={`max-w-[min(82%,44rem)] rounded-3xl px-4 py-3 shadow-sm ${
+      <div className={`max-w-[calc(100%_-_2.5rem)] rounded-2xl px-3.5 py-3 shadow-sm sm:max-w-[min(82%,44rem)] sm:rounded-3xl sm:px-4 ${
         isUser
           ? "rounded-tr-md border border-brand/15 bg-brand text-white"
           : isTool
@@ -245,7 +245,7 @@ export function MessageTimeline({ messages, toolCalls, onFeedback }: MessageTime
         });
 
         return (
-          <div className="relative space-y-3 before:absolute before:left-[18px] before:top-12 before:h-[calc(100%-3rem)] before:w-px before:bg-gradient-to-b before:from-accent/70 before:to-line last:before:hidden" key={message.id}>
+          <div className="relative space-y-3 before:absolute before:left-[15px] before:top-12 sm:before:left-[18px] before:h-[calc(100%-3rem)] before:w-px before:bg-gradient-to-b before:from-accent/70 before:to-line last:before:hidden" key={message.id}>
             <MessageBubble message={message} onFeedback={onFeedback} />
             <ToolCallGroup calls={relatedCalls} />
           </div>
